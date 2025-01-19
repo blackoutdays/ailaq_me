@@ -1,0 +1,35 @@
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework.routers import DefaultRouter
+from drf_spectacular.views import SpectacularSwaggerView, SpectacularAPIView
+from ailaq.views import LoginView, RegisterUserView, SubmitPsychologistApplicationView, AdminApprovePsychologistView, \
+    UpdatePsychologistProfileView, CatalogView, BuyRequestsView, PsychologistProfileViewSet, PsychologistProfileView, \
+    PsychologistReviewsView
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import path
+
+router = DefaultRouter()
+router.register(r'psychologists', PsychologistProfileViewSet)
+
+urlpatterns = [
+    path('api-token-auth/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api-token-refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('admin/', admin.site.urls),
+    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('login/', LoginView.as_view(), name='login'),
+    path('register/', RegisterUserView.as_view(), name='register'),
+    path('submit-psychologist-application/', SubmitPsychologistApplicationView.as_view(), name='submit_psychologist_application'),
+    path('update-psychologist-profile/', UpdatePsychologistProfileView.as_view(), name='update_psychologist_profile'),
+    path('psychologist-profile/<int:psychologist_id>/', PsychologistProfileView.as_view(), name='psychologist-profile'),
+    path('admin-approve-psychologist/<int:psychologist_id>/', AdminApprovePsychologistView.as_view(),
+         name='admin_approve_psychologist'),
+    path('catalog/', CatalogView.as_view(), name='catalog'),
+    path('buy-request/', BuyRequestsView.as_view(), name='buy_request'),
+    path('psychologists/<int:psychologist_id>/reviews/', PsychologistReviewsView.as_view(), name='psychologist-reviews'
+    ),
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
