@@ -1,31 +1,31 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from drf_spectacular.utils import extend_schema_field
+from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
+    Review
 
-from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel
+CustomUser = get_user_model()
 
 class CustomUserCreationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    role = serializers.CharField(read_only=True)  # role доступно только для чтения
 
     class Meta:
         model = CustomUser
         fields = ['email', 'password', 'is_psychologist', 'role']
 
-    @extend_schema_field(serializers.CharField())
-    def get_role(self, obj):
-        return obj.role
-
     def create(self, validated_data):
-        from ailaq.models import CustomUser, PsychologistApplication
-
+        is_psychologist = validated_data.get('is_psychologist', False)
         user = CustomUser.objects.create_user(
             email=validated_data['email'],
             password=validated_data['password'],
-            is_psychologist=validated_data.get('is_psychologist', False),
+            is_psychologist=is_psychologist,
         )
 
-        if user.is_psychologist:
-            PsychologistApplication.objects.create(user=user)
+        if is_psychologist:
+            # Создаём заявку со статусом 'PENDING'
+            PsychologistApplication.objects.create(user=user, status='PENDING')
+            # Создаём профиль с is_verified=False, is_in_catalog=False
+            PsychologistProfile.objects.create(user=user, is_verified=False, is_in_catalog=False)
 
         return user
 
@@ -64,3 +64,8 @@ class PsychologistLevelSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistLevel
         fields = '__all__'
+
+class ReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Review
+        fields = "__all__"
