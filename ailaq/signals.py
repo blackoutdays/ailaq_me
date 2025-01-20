@@ -6,7 +6,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 @receiver(post_save, sender=Session)
 def update_requests_count(sender, instance, **kwargs):
     """

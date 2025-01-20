@@ -1,11 +1,15 @@
 from django.contrib import admin, messages
 from django.utils.html import format_html
-from .models import PsychologistApplication, PsychologistProfile, ClientProfile, CustomUser
+from .models import PsychologistApplication, PsychologistProfile, ClientProfile, CustomUser, PsychologistFAQ
 from .services import process_psychologist_application, send_documents_request_email
 
 import logging
 logger = logging.getLogger(__name__)
 
+# faq психолога вопрос/ы-ответ/ы
+class PsychologistFAQInline(admin.TabularInline):
+    model = PsychologistFAQ
+    extra = 1  # Количество пустых строк для добавления новых объектов
 
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
@@ -16,7 +20,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ['email', 'is_psychologist']
 
-
+# форма заяки на психолога, отображение в админке
 @admin.register(PsychologistApplication)
 class PsychologistApplicationAdmin(admin.ModelAdmin):
     list_display = [
@@ -25,6 +29,7 @@ class PsychologistApplicationAdmin(admin.ModelAdmin):
     ]
     actions = ['approve_application', 'reject_application', 'request_documents']
     search_fields = ['user__email']
+    inlines = [PsychologistFAQInline]  # inline для FAQ
 
     def approve_application(self, request, queryset):
         """Одобрение заявок администрацией."""
@@ -80,7 +85,7 @@ class PsychologistApplicationAdmin(admin.ModelAdmin):
 
     view_documents.short_description = "Documents"
 
-
+#профиль психолога
 @admin.register(PsychologistProfile)
 class PsychologistProfileAdmin(admin.ModelAdmin):
     list_display = ['user', 'is_verified', 'is_in_catalog', 'requests_count', 'get_average_rating']

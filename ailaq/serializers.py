@@ -126,60 +126,25 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
+# Профиль клиента
 class ClientProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientProfile
         fields = '__all__'
+
 
 class PsychologistLevelSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistLevel
         fields = '__all__'
 
+# Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = "__all__"
 
-# class CatalogSerializer(serializers.ModelSerializer):
-#     first_name_ru = serializers.SerializerMethodField()
-#     last_name_ru = serializers.SerializerMethodField()
-#     middle_name_ru = serializers.SerializerMethodField()
-#     catalog_description_ru = serializers.SerializerMethodField()
-#     session_price = serializers.SerializerMethodField()
-#     session_discount = serializers.SerializerMethodField()
-#
-#     class Meta:
-#         model = PsychologistProfile
-#         fields = [
-#             'id',
-#             'first_name_ru',
-#             'last_name_ru',
-#             'middle_name_ru',
-#             'catalog_description_ru',
-#             'session_price',
-#             'session_discount',
-#             'is_verified',
-#             'requests_count',
-#         ]
-#
-#     def get_first_name_ru(self, obj):
-#         return getattr(obj.application, 'first_name_ru', None)
-#
-#     def get_last_name_ru(self, obj):
-#         return getattr(obj.application, 'last_name_ru', None)
-#
-#     def get_middle_name_ru(self, obj):
-#         return getattr(obj.application, 'middle_name_ru', None)
-#
-#     def get_catalog_description_ru(self, obj):
-#         return getattr(obj.application, 'catalog_description_ru', None)
-#
-#     def get_session_price(self, obj):
-#         return getattr(obj.application, 'session_price', None)
-#
-#     def get_session_discount(self, obj):
-#         return getattr(obj.application, 'session_discount', None)
 
 class CatalogSerializer(serializers.ModelSerializer):
     first_name_ru = serializers.SerializerMethodField()
@@ -246,3 +211,59 @@ class BuyRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = BuyRequest
         fields = '__all__'
+
+
+#для вьющек сериализаторы по форме/профилю психолога
+class PersonalInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistApplication
+        fields = [
+            'first_name_ru',
+            'last_name_ru',
+            'middle_name_ru',
+            'communication_language', 'gender', 'city', 'telegram_id', 'email',
+            'about_me_ru', 'catalog_description_ru'
+        ]
+
+
+# Квалификация психолога
+class QualificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistApplication
+        fields = [
+            'qualification', 'works_with', 'problems_worked_with', 'work_methods',
+            'practice_start_date', 'academic_degree', 'psychologist_directions',
+            'child_psychologist_directions', 'coach_directions', 'additional_specialization',
+            'work_features', 'education', 'education_files'
+        ]
+
+class ServicePriceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistApplication
+        fields = [
+            'session_duration', 'session_price', 'session_discount',
+            'online_session_duration', 'online_session_price', 'online_session_discount',
+            'couple_session_duration', 'couple_session_price', 'couple_session_discount',
+            'couple_online_session_duration', 'couple_online_session_price', 'couple_online_session_discount',
+            'office_address', 'office_photo'
+        ]
+
+
+# 1. faq вопрос/ы и ответ/ы
+class FAQSerializer(serializers.Serializer):
+    question = serializers.CharField(max_length=255)
+    answer = serializers.CharField(max_length=1000)
+
+
+# 2. faq вопрос/ы и ответ/ы
+class FAQListSerializer(serializers.Serializer):
+    faqs = serializers.ListField(
+        child=FAQSerializer(),
+        required=False  # Чтобы поддерживать пустые списки
+    )
+
+#загрузка доков
+class DocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistApplication
+        fields = ['passport_document', 'education_files']

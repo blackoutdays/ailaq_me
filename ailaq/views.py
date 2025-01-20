@@ -9,13 +9,15 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParamet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 from .filters import PsychologistProfileFilter
-from .models import PsychologistProfile, PsychologistApplication, PurchasedRequest, ClientProfile, Review, CustomUser
+from .models import PsychologistProfile, PsychologistApplication, PurchasedRequest, ClientProfile, Review, CustomUser, \
+    PsychologistFAQ
 from .serializers import (
     CustomUserCreationSerializer,
     LoginSerializer,
     PsychologistProfileSerializer,
     PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
-    BuyRequestSerializer,
+    BuyRequestSerializer, PersonalInfoSerializer, QualificationSerializer, ServicePriceSerializer, DocumentSerializer,
+    FAQSerializer, FAQListSerializer,
 )
 from .permissions import IsVerifiedPsychologist
 from .pagination import StandardResultsSetPagination
@@ -414,3 +416,154 @@ class PsychologistApplicationView(APIView):
             serializer.save(user=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+# энпоинты для профиля/заявки психолога
+class PersonalInfoView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="update_personal_info",
+        description="Обновить личную информацию психолога.",
+        request=PersonalInfoSerializer,
+        responses={
+            200: OpenApiResponse(description="Личная информация обновлена успешно."),
+            400: OpenApiResponse(description="Ошибка валидации."),
+        },
+    )
+    def post(self, request):
+        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
+        serializer = PersonalInfoSerializer(app, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Личная информация обновлена успешно."}, status=200)
+        return Response(serializer.errors, status=400)
+
+class QualificationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="update_qualification",
+        description="Обновить информацию о квалификации психолога.",
+        request=QualificationSerializer,
+        responses={
+            200: OpenApiResponse(description="Квалификация обновлена успешно."),
+            400: OpenApiResponse(description="Ошибка валидации."),
+        },
+    )
+    def post(self, request):
+        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
+        serializer = QualificationSerializer(app, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Квалификация обновлена успешно."}, status=200)
+        return Response(serializer.errors, status=400)
+
+
+class ServicePriceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
+        serializer = ServicePriceSerializer(app, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Service prices updated successfully."}, status=200)
+        return Response(serializer.errors, status=400)
+
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+
+class FAQView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="get_or_update_faq",
+        description="Получить список FAQ, один FAQ или пусто, в зависимости от переданных данных.",
+        request=FAQListSerializer,
+        responses={
+            200: FAQListSerializer,
+            400: OpenApiResponse(description="Некорректные данные."),
+        },
+    )
+    def post(self, request):
+        """
+        Обработка POST-запроса: сохранение списка FAQ или одного FAQ.
+        """
+        data = request.data.get("faqs", [])
+        if isinstance(data, list):  # Если список FAQ
+            serializer = FAQListSerializer(data={"faqs": data})
+        else:  # Если это один FAQ
+            serializer = FAQSerializer(data=request.data)
+
+        if serializer.is_valid():
+            faqs_data = serializer.validated_data.get("faqs", [])
+            if faqs_data:  # Обработка списка
+                # Сохраняем список FAQ
+                for faq in faqs_data:
+                    PsychologistFAQ.objects.create(
+                        application=PsychologistApplication.objects.get(user=request.user),
+                        question=faq["question"],
+                        answer=faq["answer"],
+                    )
+                return Response({"message": "Список FAQ добавлен успешно."}, status=200)
+            elif "question" in serializer.validated_data:  # Обработка одного FAQ
+                faq = serializer.validated_data
+                PsychologistFAQ.objects.create(
+                    application=PsychologistApplication.objects.get(user=request.user),
+                    question=faq["question"],
+                    answer=faq["answer"],
+                )
+                return Response({"message": "FAQ добавлен успешно."}, status=200)
+            else:  # Если ничего
+                return Response({"message": "Нет данных для сохранения."}, status=204)
+        return Response(serializer.errors, status=400)
+
+    @extend_schema(
+        operation_id="get_faqs",
+        description="Получить список FAQ текущего пользователя.",
+        responses={
+            200: FAQListSerializer,
+            404: OpenApiResponse(description="FAQ не найдены."),
+        },
+    )
+    def get(self, request):
+        """
+        Получить список FAQ для текущего пользователя.
+        """
+        application = PsychologistApplication.objects.filter(user=request.user).first()
+        if not application:
+            return Response({"error": "Заявка не найдена."}, status=404)
+
+        faqs = application.faqs.all()
+        if not faqs.exists():
+            return Response({"faqs": []}, status=200)
+
+        serializer = FAQListSerializer({"faqs": [{"question": faq.question, "answer": faq.answer} for faq in faqs]})
+        return Response(serializer.data, status=200)
+
+
+class DocumentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="update_documents",
+        description="Добавить или обновить документы психолога.",
+        request=DocumentSerializer,
+        responses={
+            200: OpenApiResponse(description="Документы обновлены успешно."),
+            400: OpenApiResponse(description="Ошибка валидации."),
+        },
+    )
+    def post(self, request):
+        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
+        serializer = DocumentSerializer(app, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Документы обновлены успешно."}, status=200)
+        return Response(serializer.errors, status=400)

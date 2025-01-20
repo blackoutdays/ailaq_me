@@ -35,6 +35,7 @@ class CustomUserManager(BaseUserManager):
 
 class CustomUser(AbstractBaseUser):
     email = models.EmailField(unique=True)
+    telegram_id = models.BigIntegerField(null=True, blank=True)
     is_psychologist = models.BooleanField(default=False)
     wants_to_be_psychologist = models.BooleanField(default=False)  # Ставится в True, если «кандидат»
 
@@ -68,6 +69,7 @@ class CustomUser(AbstractBaseUser):
         return self.is_superuser
 
 
+#профиль клиента
 class ClientProfile(models.Model):
     email = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
     whatsapp_id = models.CharField(max_length=20, null=True, blank=True)
@@ -99,6 +101,7 @@ class EducationDocument(models.Model):
     document = models.FileField(upload_to='education_documents/')
 
 
+# форма заявки/профиль (только для психолога)
 class PsychologistApplication(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
 
@@ -150,9 +153,6 @@ class PsychologistApplication(models.Model):
     help_text_ru = models.TextField(null=True, blank=True)
     help_text_en = models.TextField(null=True, blank=True)
     help_text_kz = models.TextField(null=True, blank=True)
-
-    # Видео презентация (ссылка для админа для проверки)
-    video_presentation_link = models.URLField(null=True, blank=True)
 
     # Квалификация (специализация)
     qualification = models.CharField(max_length=100, null=True, blank=True)  # Например "Психолог"
@@ -250,13 +250,15 @@ class PsychologistApplication(models.Model):
         return f"PsychologistApplication for {self.user.email}"
 
 
+#профиль психолога
 class PsychologistProfile(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="psychologist_profile", unique=True)
+    telegram_id = models.BigIntegerField(null=True, blank=True)
     application = models.OneToOneField(
         PsychologistApplication,
         on_delete=models.CASCADE,
         related_name='profile',
-        null=True,  # или установите значение по умолчанию
+        null=True,
         blank=True
     )
 
@@ -278,18 +280,13 @@ class PsychologistProfile(models.Model):
         return self.is_verified and self.requests_count >= required_requests
 
     def update_catalog_status(self):
-        """
-        Обновляет статус `is_in_catalog` на основе метода `can_be_in_catalog`.
-        """
+        """Обновляет статус `is_in_catalog` на основе метода `can_be_in_catalog`."""
         self.is_in_catalog = self.can_be_in_catalog()
         self.save()
 
     @staticmethod
     def process_psychologist_application(application_id):
-        """
-        Обработка заявки психолога.
-        """
-
+        """Обработка заявки психолога."""
         try:
             application = PsychologistApplication.objects.get(id=application_id)
 
@@ -321,6 +318,7 @@ class PsychologistProfile(models.Model):
 
 def get_default_cost():
     return settings.REQUEST_COST
+
 
 class PurchasedRequest(models.Model):
     psychologist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -356,6 +354,7 @@ class Session(models.Model):
     status = models.CharField(max_length=10, choices=status_choices, default='SCHEDULED')
 
 
+# отзыв за проведенную сессию
 class Review(models.Model):
     session = models.OneToOneField(
         Session,
@@ -374,6 +373,21 @@ class Specialization(models.Model):
 
     def __str__(self):
         return self.name
+
+
+#  faq вопрос/ы и ответ/ы психолога
+class PsychologistFAQ(models.Model):
+    application = models.ForeignKey(
+        'PsychologistApplication',
+        related_name='faqs',
+        on_delete=models.CASCADE
+    )
+    question = models.CharField(max_length=255)
+    answer = models.TextField()
+
+    def __str__(self):
+        return f"FAQ: {self.question[:50]}..."
+
 
 class BuyRequest(models.Model):
     psychologist = models.ForeignKey(PsychologistProfile, on_delete=models.CASCADE, related_name='buy_requests')

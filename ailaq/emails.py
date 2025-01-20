@@ -6,7 +6,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 def send_email(subject, message, recipient_list):
-    """Универсальная функция отправки email."""
     try:
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, recipient_list)
         logger.info(f"Email sent to {', '.join(recipient_list)}")

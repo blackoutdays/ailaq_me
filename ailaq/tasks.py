@@ -1,12 +1,10 @@
 #tasks.py
 from . import models
-from .models import PsychologistApplication, PsychologistProfile, PsychologistLevel
+from .models import PsychologistApplication, PsychologistLevel
 from datetime import date
 
 def check_psychologist_level(user):
-    """
-    Проверка уровня психолога на основе количества просроченных заявок.
-    """
+    """ Проверка уровня психолога на основе количества просроченных заявок. """
     profile = user.psychologist_profile
     expired_count = PsychologistApplication.objects.filter(
         user=user, status='EXPIRED'
