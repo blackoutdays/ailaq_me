@@ -107,16 +107,16 @@ class PsychologistApplication(models.Model):
 
     # Личная информация
     first_name_ru = models.CharField(max_length=50, null=True, blank=True)
-    first_name_en = models.CharField(max_length=50, null=True, blank=True)
-    first_name_kz = models.CharField(max_length=50, null=True, blank=True)
+    # first_name_en = models.CharField(max_length=50, null=True, blank=True)
+    # first_name_kz = models.CharField(max_length=50, null=True, blank=True)
 
     last_name_ru = models.CharField(max_length=50, null=True, blank=True)
-    last_name_en = models.CharField(max_length=50, null=True, blank=True)
-    last_name_kz = models.CharField(max_length=50, null=True, blank=True)
+    # last_name_en = models.CharField(max_length=50, null=True, blank=True)
+    # last_name_kz = models.CharField(max_length=50, null=True, blank=True)
 
     middle_name_ru = models.CharField(max_length=50, null=True, blank=True)
-    middle_name_en = models.CharField(max_length=50, null=True, blank=True)
-    middle_name_kz = models.CharField(max_length=50, null=True, blank=True)
+    # middle_name_en = models.CharField(max_length=50, null=True, blank=True)
+    # middle_name_kz = models.CharField(max_length=50, null=True, blank=True)
 
     age = models.IntegerField(null=True, blank=True)
 
@@ -141,18 +141,18 @@ class PsychologistApplication(models.Model):
 
     #обо мне
     about_me_ru = models.TextField(null=True, blank=True)
-    about_me_en = models.TextField(null=True, blank=True)
-    about_me_kz = models.TextField(null=True, blank=True)
+    # about_me_en = models.TextField(null=True, blank=True)
+    # about_me_kz = models.TextField(null=True, blank=True)
 
     # Каталоговое описание психолога (будет отображаться в каталоге)
     catalog_description_ru = models.TextField(null=True, blank=True)
-    catalog_description_en = models.TextField(null=True, blank=True)
-    catalog_description_kz = models.TextField(null=True, blank=True)
+    # catalog_description_en = models.TextField(null=True, blank=True)
+    # catalog_description_kz = models.TextField(null=True, blank=True)
 
     # Чем сможете помочь (текстовое поле)
     help_text_ru = models.TextField(null=True, blank=True)
-    help_text_en = models.TextField(null=True, blank=True)
-    help_text_kz = models.TextField(null=True, blank=True)
+    # help_text_en = models.TextField(null=True, blank=True)
+    # help_text_kz = models.TextField(null=True, blank=True)
 
     # Квалификация (специализация)
     qualification = models.CharField(max_length=100, null=True, blank=True)  # Например "Психолог"
@@ -263,21 +263,12 @@ class PsychologistProfile(models.Model):
     )
 
     is_in_catalog = models.BooleanField(default=False)
-    is_verified = models.BooleanField(default=False)
     requests_count = models.PositiveIntegerField(default=0)
+    is_verified = models.BooleanField(default=False)  # Поле базы данных
 
     def __str__(self):
         return f"PsychologistProfile for {self.user.email}"
 
-    def can_be_in_catalog(self):
-        """
-        Проверяет, может ли психолог быть включён в каталог.
-        Условия:
-        - Психолог верифицирован.
-        - Количество заявок >= порога из настроек.
-        """
-        required_requests = settings.DEFAULT_CATALOG_REQUESTS_THRESHOLD
-        return self.is_verified and self.requests_count >= required_requests
 
     def update_catalog_status(self):
         """Обновляет статус `is_in_catalog` на основе метода `can_be_in_catalog`."""
@@ -315,6 +306,13 @@ class PsychologistProfile(models.Model):
         reviews_qs = Review.objects.filter(session__in=sessions_qs)
         average_rating = reviews_qs.aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0.0
         return round(average_rating, 1)
+
+    def get_reviews_count(self):
+        """
+        Возвращает количество отзывов для завершённых сессий психолога.
+        """
+        return Review.objects.filter(session__psychologist=self, session__status='COMPLETED').count()
+
 
 def get_default_cost():
     return settings.REQUEST_COST
@@ -361,12 +359,25 @@ class Review(models.Model):
         on_delete=models.CASCADE,
         related_name='review'
     )
-    rating = models.PositiveIntegerField(default=0)
-    text = models.TextField(null=True, blank=True)
+    client = models.ForeignKey(
+        ClientProfile,
+        on_delete=models.CASCADE,
+        related_name='reviews'
+    )
+    psychologist = models.ForeignKey(
+        PsychologistProfile,
+        on_delete=models.CASCADE,
+        related_name='reviews'
+    )
+    client_name = models.CharField(max_length=255)  # ФИО клиента
+    psychologist_name = models.CharField(max_length=255)  # ФИО психолога
+    rating = models.PositiveIntegerField(default=0)  # Рейтинг от 1 до 5
+    text = models.TextField(null=True, blank=True)  # Текст отзыва
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Review #{self.id} for session #{self.session.id}"
+        return f"Review by {self.client_name} for {self.psychologist_name} (Rating: {self.rating})"
+
 
 class Specialization(models.Model):
     name = models.CharField(max_length=255)

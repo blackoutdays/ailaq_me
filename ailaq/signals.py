@@ -20,13 +20,10 @@ def update_requests_count(sender, instance, **kwargs):
 @receiver(post_save, sender=CustomUser)
 def handle_custom_user_post_save(sender, instance, created, **kwargs):
     """
-    Обрабатывает событие сохранения пользователя.
-    Создаёт заявку и профиль для психолога, если указано желание стать психологом.
+    Создаёт заявку и профиль для психолога, если пользователь хочет быть психологом.
     """
     if created and instance.wants_to_be_psychologist:
-        # Создайте заявку, если её нет
         PsychologistApplication.objects.get_or_create(user=instance)
-        # Создайте профиль, если его нет
         PsychologistProfile.objects.get_or_create(user=instance)
 
 
@@ -35,12 +32,19 @@ def handle_application_status_change(sender, instance, **kwargs):
     """
     Обрабатывает изменение статуса заявки психолога.
     """
+    user = instance.user
+    profile, _ = PsychologistProfile.objects.get_or_create(user=user)
+
     if instance.status == 'APPROVED':
-        user = instance.user
         user.is_psychologist = True
         user.save()
-        # Создайте профиль, если его нет
-        PsychologistProfile.objects.get_or_create(user=user)
+        profile.is_verified = True
+        profile.save()
         send_approval_email(instance)
+
     elif instance.status == 'REJECTED':
+        user.is_psychologist = False
+        user.save()
+        profile.is_verified = False
+        profile.save()
         send_rejection_email(instance)

@@ -1,8 +1,9 @@
 #views
 from rest_framework import status, viewsets
-from rest_framework.generics import GenericAPIView
+from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.views import APIView
+from django.db.models import Q
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
@@ -10,7 +11,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 from .filters import PsychologistProfileFilter
 from .models import PsychologistProfile, PsychologistApplication, PurchasedRequest, ClientProfile, Review, CustomUser, \
-    PsychologistFAQ
+    PsychologistFAQ, Review, Session
 from .serializers import (
     CustomUserCreationSerializer,
     LoginSerializer,
@@ -321,38 +322,38 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
 
-
-class PsychologistReviewsView(APIView):
-    @extend_schema(
-        description="Retrieve a list of all reviews or reviews for a specific psychologist by their ID.",
-        parameters=[
-            OpenApiParameter(
-                name="psychologist_id",
-                description="ID of the psychologist to filter reviews (optional).",
-                required=False,
-                type=int,
-            )
-        ],
-        responses={200: ReviewSerializer(many=True)},
-    )
-    def get(self, request):
-        psychologist_id = request.query_params.get('psychologist_id')
-
-        if psychologist_id:
-            try:
-                profile = PsychologistProfile.objects.get(pk=psychologist_id)
-                reviews = Review.objects.filter(session__psychologist=profile)
-            except PsychologistProfile.DoesNotExist:
-                return Response(
-                    {"error": "Psychologist profile not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        else:
-            reviews = Review.objects.all()  # Retrieve all reviews
-
-        serializer = ReviewSerializer(reviews, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
+#
+# class PsychologistReviewsView(APIView):
+#     @extend_schema(
+#         description="Retrieve a list of all reviews or reviews for a specific psychologist by their ID.",
+#         parameters=[
+#             OpenApiParameter(
+#                 name="psychologist_id",
+#                 description="ID of the psychologist to filter reviews (optional).",
+#                 required=False,
+#                 type=int,
+#             )
+#         ],
+#         responses={200: ReviewSerializer(many=True)},
+#     )
+#     def get(self, request):
+#         psychologist_id = request.query_params.get('psychologist_id')
+#
+#         if psychologist_id:
+#             try:
+#                 profile = PsychologistProfile.objects.get(pk=psychologist_id)
+#                 reviews = Review.objects.filter(session__psychologist=profile)
+#             except PsychologistProfile.DoesNotExist:
+#                 return Response(
+#                     {"error": "Psychologist profile not found."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+#         else:
+#             reviews = Review.objects.all()  # Retrieve all reviews
+#
+#         serializer = ReviewSerializer(reviews, many=True)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+#
 
 class PsychologistProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -419,8 +420,7 @@ class PsychologistApplicationView(APIView):
 
 
 
-
-# энпоинты для профиля/заявки психолога
+# эндпоинты для профиля/заявки психолога
 class PersonalInfoView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -440,6 +440,7 @@ class PersonalInfoView(APIView):
             serializer.save()
             return Response({"message": "Личная информация обновлена успешно."}, status=200)
         return Response(serializer.errors, status=400)
+
 
 class QualificationView(APIView):
     permission_classes = [IsAuthenticated]
@@ -461,23 +462,16 @@ class QualificationView(APIView):
             return Response({"message": "Квалификация обновлена успешно."}, status=200)
         return Response(serializer.errors, status=400)
 
-
-class ServicePriceView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
-        serializer = ServicePriceSerializer(app, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Service prices updated successfully."}, status=200)
-        return Response(serializer.errors, status=400)
-
-
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiResponse
+# class ServicePriceView(APIView):
+#     permission_classes = [IsAuthenticated]
+#
+#     def post(self, request):
+#         app, created = PsychologistApplication.objects.get_or_create(user=request.user)
+#         serializer = ServicePriceSerializer(app, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({"message": "Service prices updated successfully."}, status=200)
+#         return Response(serializer.errors, status=400)
 
 class FAQView(APIView):
     permission_classes = [IsAuthenticated]
@@ -567,3 +561,114 @@ class DocumentView(APIView):
             serializer.save()
             return Response({"message": "Документы обновлены успешно."}, status=200)
         return Response(serializer.errors, status=400)
+
+
+#Список отзывов (GET) и создание нового отзыва (POST)
+class ReviewListCreateView(ListCreateAPIView):
+    queryset = Review.objects.all()
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Получить список отзывов",
+        description="Возвращает список всех отзывов с данными о клиенте, психологе, сессии, рейтинге и тексте отзыва.",
+        responses={200: ReviewSerializer(many=True)},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Создать отзыв",
+        description="Создаёт новый отзыв. Требуется указать ID сессии, рейтинг и текст отзыва.",
+        request=ReviewSerializer,
+        responses={201: ReviewSerializer},
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+#Подробный отзыв (GET, PUT, DELETE)
+class ReviewDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = Review.objects.all()
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Получить отзыв",
+        description="Возвращает данные конкретного отзыва по его ID.",
+        responses={200: ReviewSerializer},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Обновить отзыв",
+        description="Обновляет существующий отзыв. Требуются права доступа и ID отзыва.",
+        request=ReviewSerializer,
+        responses={200: ReviewSerializer},
+    )
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Удалить отзыв",
+        description="Удаляет отзыв по ID. Требуются права доступа.",
+        responses={204: None},
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
+
+
+#	1.	Проверить, существует ли завершённая сессия между клиентом и психологом.
+#   2.	Если такая сессия не найдена, отклонить запрос с сообщением об ошибке.
+class ReviewCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        # ID текущего пользователя (клиента)
+        client = request.user.clientprofile
+        psychologist_id = request.data.get("psychologist_id")  # ID психолога
+        rating = request.data.get("rating")  # Рейтинг (1-5)
+        text = request.data.get("text")  # Текст отзыва
+
+        if not psychologist_id or not rating:
+            return Response(
+                {"error": "Пожалуйста, укажите ID психолога и рейтинг."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Проверяем наличие завершённой сессии между клиентом и психологом
+            completed_session = Session.objects.filter(
+                Q(client=client) & Q(psychologist_id=psychologist_id) & Q(status="COMPLETED")
+            ).first()
+
+            if not completed_session:
+                return Response(
+                    {"error": "Вы можете оставить отзыв только после завершённой сессии с этим психологом."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Проверяем, существует ли уже отзыв для этой сессии
+            if Review.objects.filter(session=completed_session).exists():
+                return Response(
+                    {"error": "Вы уже оставили отзыв для этой сессии."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Создаём отзыв
+            review = Review.objects.create(
+                session=completed_session,
+                client_id=client.id,
+                psychologist_id=psychologist_id,
+                client_name=request.user.email,  # Или другое поле для ФИО
+                psychologist_name=completed_session.psychologist.user.email,  # Или другое поле для ФИО
+                rating=rating,
+                text=text,
+            )
+
+            serializer = ReviewSerializer(review)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

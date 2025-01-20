@@ -141,9 +141,21 @@ class PsychologistLevelSerializer(serializers.ModelSerializer):
 
 # Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):
+    psychologist_name = serializers.ReadOnlyField(source='psychologist_id.user.email')
+    client_name = serializers.ReadOnlyField(source='client_id.email')
+
     class Meta:
         model = Review
-        fields = "__all__"
+        fields = [
+            'id',
+            'client_id',
+            'psychologist_id',
+            'client_name',
+            'psychologist_name',
+            'rating',
+            'text',
+            'created_at',
+        ]
 
 
 class CatalogSerializer(serializers.ModelSerializer):
@@ -196,16 +208,11 @@ class CatalogSerializer(serializers.ModelSerializer):
         return getattr(obj.application, 'session_price', None)
 
     def get_average_rating(self, obj):
-        """
-        Возвращает средний рейтинг психолога.
-        """
         return obj.get_average_rating()
 
     def get_reviews_count(self, obj):
-        """
-        Возвращает количество отзывов для завершенных сессий психолога.
-        """
-        return Review.objects.filter(session__psychologist=obj, session__status='COMPLETED').count()
+        return obj.get_reviews_count()
+
 
 class BuyRequestSerializer(serializers.ModelSerializer):
     class Meta:

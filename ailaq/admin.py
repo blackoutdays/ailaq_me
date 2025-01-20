@@ -6,10 +6,12 @@ from .services import process_psychologist_application, send_documents_request_e
 import logging
 logger = logging.getLogger(__name__)
 
+
 # faq психолога вопрос/ы-ответ/ы
 class PsychologistFAQInline(admin.TabularInline):
     model = PsychologistFAQ
     extra = 1  # Количество пустых строк для добавления новых объектов
+
 
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
@@ -20,25 +22,26 @@ class ClientProfileAdmin(admin.ModelAdmin):
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ['email', 'is_psychologist']
 
-# форма заяки на психолога, отображение в админке
+
+# форма заявки на психолога, отображение в админке
 @admin.register(PsychologistApplication)
 class PsychologistApplicationAdmin(admin.ModelAdmin):
-    list_display = [
-        field.name for field in PsychologistApplication._meta.get_fields()
-        if not field.is_relation
-    ]
     actions = ['approve_application', 'reject_application', 'request_documents']
-    search_fields = ['user__email']
-    inlines = [PsychologistFAQInline]  # inline для FAQ
 
     def approve_application(self, request, queryset):
-        """Одобрение заявок администрацией."""
         for application in queryset.filter(status='PENDING'):
             try:
                 application.status = 'APPROVED'
                 application.save()
-                process_psychologist_application(application.id)
-                self.message_user(request, f"Application ID {application.id} approved.")
+
+                # Автоматически создаёт профиль, если он отсутствует
+                PsychologistProfile.objects.get_or_create(user=application.user)
+
+                self.message_user(
+                    request,
+                    f"Application ID {application.id} approved.",
+                    level=messages.SUCCESS
+                )
             except Exception as e:
                 logger.error(f"Error approving application {application.id}: {str(e)}")
                 self.message_user(request, f"Error approving application {application.id}.", level=messages.ERROR)
@@ -85,11 +88,18 @@ class PsychologistApplicationAdmin(admin.ModelAdmin):
 
     view_documents.short_description = "Documents"
 
+
 #профиль психолога
 @admin.register(PsychologistProfile)
 class PsychologistProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'is_verified', 'is_in_catalog', 'requests_count', 'get_average_rating']
+    list_display = ['user', 'is_verified_display', 'is_in_catalog', 'requests_count', 'get_average_rating']
     search_fields = ['user__email']
+    list_filter = ['is_in_catalog']
+
+    def is_verified_display(self, obj):
+        return obj.is_verified
+    is_verified_display.boolean = True  # Отображать как галочку
+    is_verified_display.short_description = "Verified"
 
     def get_average_rating(self, obj):
         return obj.get_average_rating()

@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularSwaggerView, SpectacularAPIView
 from ailaq.views import LoginView, RegisterUserView, SubmitPsychologistApplicationView, AdminApprovePsychologistView, \
     UpdatePsychologistProfileView, CatalogView, BuyRequestsView, PsychologistProfileViewSet, PsychologistProfileView, \
-    PsychologistReviewsView, QualificationView, PersonalInfoView, ServicePriceView, FAQView, DocumentView
+QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewListCreateView, \
+    ReviewDetailView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -27,13 +28,12 @@ urlpatterns = [
          name='admin_approve_psychologist'),
     path('catalog/', CatalogView.as_view(), name='catalog'),
     path('buy-request/', BuyRequestsView.as_view(), name='buy_request'),
-    path('psychologists/<int:psychologist_id>/reviews/', PsychologistReviewsView.as_view(), name='psychologist-reviews'
-    ),
     path('psychologist-application/personal-info/', PersonalInfoView.as_view()),
     path('psychologist-application/qualification/', QualificationView.as_view()),
-    path('psychologist-application/service-prices/', ServicePriceView.as_view()),
     path('psychologist-application/faq/', FAQView.as_view()),
     path('psychologist-application/documents/', DocumentView.as_view()),
+    path('reviews/', ReviewListCreateView.as_view(), name='review-list-create'),
+    path('reviews/<int:pk>/', ReviewDetailView.as_view(), name='review-detail'),
 ]
 
 if settings.DEBUG:
