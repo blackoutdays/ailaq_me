@@ -1,4 +1,12 @@
 #views
+import hmac
+import time
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.contrib.auth import login
+from hashlib import sha256
 from rest_framework import status, viewsets
 from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
@@ -9,6 +17,7 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
+from config import settings
 from .filters import PsychologistProfileFilter
 from .models import PsychologistProfile, PsychologistApplication, PurchasedRequest, ClientProfile, Review, CustomUser, \
     PsychologistFAQ, Review, Session
@@ -28,7 +37,6 @@ from django.utils.decorators import method_decorator
 import logging
 logger = logging.getLogger(__name__)
 
-
 # Регистрация пользователя
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterUserView(APIView):
@@ -46,10 +54,11 @@ class RegisterUserView(APIView):
         if serializer.is_valid():
             user = serializer.save()
 
-            # Убедитесь, что заявка создаётся только если её нет
+            # Создаём заявку для психолога, если пользователь хочет быть психологом
             if user.wants_to_be_psychologist:
                 PsychologistApplication.objects.get_or_create(user=user)
 
+            # Генерируем JWT токены
             refresh = RefreshToken.for_user(user)
             return Response(
                 {
@@ -59,6 +68,38 @@ class RegisterUserView(APIView):
                 status=status.HTTP_201_CREATED,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# # Регистрация пользователя
+# @method_decorator(csrf_exempt, name='dispatch')
+# class RegisterUserView(APIView):
+#     @extend_schema(
+#         operation_id="register_user",
+#         description="Регистрация нового пользователя.",
+#         request=CustomUserCreationSerializer,
+#         responses={
+#             201: OpenApiResponse(description="User registered successfully."),
+#             400: OpenApiResponse(description="Invalid data."),
+#         },
+#     )
+#     def post(self, request):
+#         serializer = CustomUserCreationSerializer(data=request.data)
+#         if serializer.is_valid():
+#             user = serializer.save()
+#
+#             # Убедитесь, что заявка создаётся только если её нет
+#             if user.wants_to_be_psychologist:
+#                 PsychologistApplication.objects.get_or_create(user=user)
+#
+#             refresh = RefreshToken.for_user(user)
+#             return Response(
+#                 {
+#                     "access_token": str(refresh.access_token),
+#                     "refresh_token": str(refresh),
+#                 },
+#                 status=status.HTTP_201_CREATED,
+#             )
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 # Авторизация пользователя
 class LoginView(APIView):
@@ -672,3 +713,94 @@ class ReviewCreateView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+#Telegram WIDGET
+class TelegramAuthView(APIView):
+    @staticmethod
+    def validate_telegram_auth(auth_data: dict, bot_token: str) -> bool:
+        check_string = "\n".join([f"{k}={v}" for k, v in sorted(auth_data.items()) if k != "hash"])
+        secret_key = sha256(bot_token.encode()).digest()
+        expected_hash = hmac.new(secret_key, check_string.encode(), sha256).hexdigest()
+        return expected_hash == auth_data.get("hash") and time.time() - int(auth_data["auth_date"]) < 86400
+
+    def post(self, request, *args, **kwargs):
+        auth_data = request.data
+        bot_token = settings.TELEGRAM_BOT_TOKEN
+
+        if not self.validate_telegram_auth(auth_data, bot_token):
+            return JsonResponse({"error": "Invalid Telegram authentication"}, status=400)
+
+        telegram_id = auth_data["id"]
+        username = auth_data.get("username", "")
+        first_name = auth_data.get("first_name", "")
+        role = request.data.get("role", "client")  # Получаем роль из запроса (по умолчанию "client")
+
+        # Создаём или обновляем пользователя
+        user, created = CustomUser.objects.get_or_create(
+            telegram_id=telegram_id,
+            defaults={
+                "username": username,
+                "first_name": first_name,
+                "is_psychologist": role == "psychologist",  # Устанавливаем роль
+            }
+        )
+
+        if not created:
+            user.username = username
+            user.first_name = first_name
+            if role == "psychologist" and not user.is_psychologist:
+                user.is_psychologist = True
+            user.save()
+
+        # Создаём профиль, если его нет
+        if created:
+            if user.is_psychologist:
+                PsychologistProfile.objects.create(user=user)
+            else:
+                ClientProfile.objects.create(email=user)
+
+        # Авторизуем пользователя
+        login(request, user)
+        refresh = RefreshToken.for_user(user)
+        return JsonResponse({
+            "message": "Authenticated successfully",
+            "access_token": str(refresh.access_token),
+            "refresh_token": str(refresh),
+            "is_psychologist": user.is_psychologist,  # Возвращаем роль для проверки
+        })
+# class TelegramAuthView(APIView):
+#     @staticmethod
+#     def validate_telegram_auth(auth_data: dict, bot_token: str) -> bool:
+#         check_string = "\n".join([f"{k}={v}" for k, v in sorted(auth_data.items()) if k != "hash"])
+#         secret_key = sha256(bot_token.encode()).digest()
+#         expected_hash = hmac.new(secret_key, check_string.encode(), sha256).hexdigest()
+#         return expected_hash == auth_data.get("hash") and time.time() - int(auth_data["auth_date"]) < 86400  # 24 hours
+#
+#     def post(self, request, *args, **kwargs):
+#         auth_data = request.data
+#         bot_token = settings.TELEGRAM_BOT_TOKEN  # Получаем токен из настроек
+#
+#         if not self.validate_telegram_auth(auth_data, bot_token):
+#             return JsonResponse({"error": "Invalid Telegram authentication"}, status=400)
+#
+#         telegram_id = auth_data["id"]
+#         username = auth_data.get("username", "")
+#
+#         # Создать пользователя, если его нет
+#         user, created = CustomUser.objects.get_or_create(
+#             telegram_id=telegram_id,
+#             defaults={"telegram_username": username, "email": f"{telegram_id}@telegram.local"}
+#         )
+#         if not created and user.telegram_username != username:
+#             user.telegram_username = username
+#             user.save()
+#
+#         # Вход пользователя
+#         login(request, user)
+#         refresh = RefreshToken.for_user(user)
+#         return JsonResponse({
+#             "message": "Authenticated successfully",
+#             "access_token": str(refresh.access_token),
+#             "refresh_token": str(refresh),
+#         })

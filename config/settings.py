@@ -11,7 +11,7 @@ SECRET_KEY = 'django-insecure-g55!wd@mx*15v0-(t7(s_0ru=^x8+pvgu-m^myrwlqepho91gl
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -155,6 +155,24 @@ AUTH_USER_MODEL = 'ailaq.CustomUser'
 REQUEST_COST = 10.00  # Стоимость одной заявки (пример для теста)
 ADMIN_EMAIL = "arukalarkins@icloud.com"  # Email для отправки уведомлений
 DEFAULT_CATALOG_REQUESTS_THRESHOLD = 3  # Минимум заявок для включения в каталог
+
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 8,
+        },
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+]
 
 # LOGGING = {
 #     'version': 1,

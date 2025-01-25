@@ -1,10 +1,11 @@
+from django.shortcuts import render
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularSwaggerView, SpectacularAPIView
 from ailaq.views import LoginView, RegisterUserView, SubmitPsychologistApplicationView, AdminApprovePsychologistView, \
     UpdatePsychologistProfileView, CatalogView, BuyRequestsView, PsychologistProfileViewSet, PsychologistProfileView, \
-QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewListCreateView, \
-    ReviewDetailView
+    QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewListCreateView, \
+    ReviewDetailView, TelegramAuthView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -34,6 +35,8 @@ urlpatterns = [
     path('psychologist-application/documents/', DocumentView.as_view()),
     path('reviews/', ReviewListCreateView.as_view(), name='review-list-create'),
     path('reviews/<int:pk>/', ReviewDetailView.as_view(), name='review-detail'),
+    path('auth/telegram/', TelegramAuthView.as_view(), name='telegram_auth'),
+    path("telegram-login/", lambda request: render(request, "telegram_auth.html"), name="telegram-login"),
 ]
 
 if settings.DEBUG:

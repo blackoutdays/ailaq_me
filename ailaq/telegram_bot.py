@@ -3,7 +3,6 @@ import os
 import django
 from django.contrib.auth import get_user_model
 
-from ailaq import models
 from config import settings
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
@@ -41,33 +40,22 @@ PSYCHOLOGIST_COMMANDS = [
     ["Посмотреть заявки на сессии"],
 ]
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_chat.id  # Числовой Telegram ID
     email = context.args[0] if context.args else None  # Ожидаем email как аргумент
 
     try:
-        user = None
-
-        # Если email передан, ищем по email
-        if email:
-            user = User.objects.get(email=email)
-        else:
-            # Если email не передан, ищем пользователя по telegram_id
-            user = User.objects.filter(
-                models.Q(psychologist_profile__telegram_id=telegram_id) |
-                models.Q(clientprofile__telegram_id=telegram_id)
-            ).first()
-
-        if not user:
-            # Если пользователя всё ещё нет, запрашиваем email
-            await update.message.reply_text(
-                "Ошибка: Укажите email в формате /start your_email@example.com"
-            )
+        if not email:
+            await update.message.reply_text("Ошибка: Укажите email в формате /start your_email@example.com")
             return
 
-        # Сохранить Telegram ID
+        # Найти пользователя по email
+        user = User.objects.get(email=email)
+
+        # Сохранить Telegram ID в зависимости от роли
         if user.is_psychologist:
-            if user.psychologist_profile.telegram_id == telegram_id:
+            if user.psychologist_profile.telegram_id:
                 await update.message.reply_text("Ваш Telegram ID уже сохранён.")
             else:
                 user.psychologist_profile.telegram_id = telegram_id
@@ -77,7 +65,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     reply_markup=ReplyKeyboardMarkup(PSYCHOLOGIST_COMMANDS, one_time_keyboard=True),
                 )
         else:
-            if user.clientprofile.telegram_id == telegram_id:
+            if user.clientprofile.telegram_id:
                 await update.message.reply_text("Ваш Telegram ID уже сохранён.")
             else:
                 user.clientprofile.telegram_id = telegram_id
@@ -91,6 +79,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logging.exception(e)
         await update.message.reply_text("Произошла ошибка. Попробуйте ещё раз.")
+
+async def schedule_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("Введите ID психолога для назначения сессии.")
+
 
 async def process_session_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     psychologist_id = update.message.text  # Telegram ID психолога

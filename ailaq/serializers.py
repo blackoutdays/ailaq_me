@@ -2,46 +2,88 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
     Review, BuyRequest
+from django.conf import settings
+from hashlib import sha256
+import hmac
+import time
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
 
 CustomUser = get_user_model()
 
+# class CustomUserCreationSerializer(serializers.ModelSerializer):
+#     password = serializers.CharField(write_only=True)
+#     role = serializers.CharField(read_only=True)  # role доступно только для чтения
+#
+#     class Meta:
+#         model = CustomUser
+#         fields = ['email', 'password', 'is_psychologist', 'role']
+#
+#     def create(self, validated_data):
+#         is_psychologist = validated_data.get('is_psychologist', False)
+#
+#         print(f"Received is_psychologist: {is_psychologist}")  # Лог для проверки
+#
+#         # Создание пользователя
+#         user = CustomUser.objects.create_user(
+#             email=validated_data['email'],
+#             password=validated_data['password'],
+#             is_psychologist=is_psychologist,
+#         )
+#
+#         if is_psychologist:
+#             user.wants_to_be_psychologist = True
+#             user.save()
+#
+#             # Проверяем существование заявки
+#             PsychologistApplication.objects.get_or_create(
+#                 user=user,
+#                 defaults={'status': 'PENDING'}
+#             )
+#
+#             # Проверяем существование профиля
+#             PsychologistProfile.objects.get_or_create(
+#                 user=user,
+#                 defaults={'is_verified': False, 'is_in_catalog': False}
+#             )
+#
+#         return user
+
 class CustomUserCreationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
-    role = serializers.CharField(read_only=True)  # role доступно только для чтения
+    password = serializers.CharField(write_only=True, required=True, min_length=8)
+    password_confirm = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = CustomUser
-        fields = ['email', 'password', 'is_psychologist', 'role']
+        fields = ['telegram_id', 'email', 'password', 'password_confirm', 'is_psychologist']
+
+    def validate(self, data):
+        """
+        Проверяем, что введённые пароли совпадают и удовлетворяют требованиям.
+        """
+        password = data.get('password')
+        password_confirm = data.get('password_confirm')
+
+        if password != password_confirm:
+            raise serializers.ValidationError({"password_confirm": "Пароли не совпадают."})
+
+        try:
+            # Используем встроенную систему Django для валидации пароля
+            validate_password(password)
+        except ValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
+
+        return data
 
     def create(self, validated_data):
-        is_psychologist = validated_data.get('is_psychologist', False)
-
-        print(f"Received is_psychologist: {is_psychologist}")  # Лог для проверки
-
-        # Создание пользователя
-        user = CustomUser.objects.create_user(
-            email=validated_data['email'],
-            password=validated_data['password'],
-            is_psychologist=is_psychologist,
-        )
-
-        if is_psychologist:
-            user.wants_to_be_psychologist = True
-            user.save()
-
-            # Проверяем существование заявки
-            PsychologistApplication.objects.get_or_create(
-                user=user,
-                defaults={'status': 'PENDING'}
-            )
-
-            # Проверяем существование профиля
-            PsychologistProfile.objects.get_or_create(
-                user=user,
-                defaults={'is_verified': False, 'is_in_catalog': False}
-            )
-
+        """
+        Создаём пользователя с проверенным паролем.
+        """
+        validated_data.pop('password_confirm')  # Убираем поле, так как оно не нужно для создания пользователя
+        password = validated_data.pop('password')
+        user = CustomUser.objects.create_user(password=password, **validated_data)
         return user
+
 
 
 class LoginSerializer(serializers.Serializer):
@@ -274,3 +316,51 @@ class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistApplication
         fields = ['passport_document', 'education_files']
+
+
+
+class TelegramAuthSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    first_name = serializers.CharField(required=False)
+    username = serializers.CharField(required=False)
+    auth_date = serializers.IntegerField()
+    hash = serializers.CharField()
+
+    def validate(self, data):
+        """
+        Проверяем Telegram авторизацию.
+        """
+        token = settings.TELEGRAM_BOT_TOKEN
+        auth_data = {key: value for key, value in data.items() if key != 'hash'}
+        check_string = "\n".join([f"{k}={v}" for k, v in sorted(auth_data.items())])
+        secret_key = sha256(token.encode()).digest()
+        expected_hash = hmac.new(secret_key, check_string.encode(), sha256).hexdigest()
+
+        # Проверка подлинности данных
+        if data['hash'] != expected_hash:
+            raise serializers.ValidationError("Invalid Telegram authentication data")
+
+        # Проверка времени авторизации (24 часа)
+        if time.time() - int(data['auth_date']) > 86400:
+            raise serializers.ValidationError("Telegram authentication expired")
+
+        return data
+
+    def create_or_update_user(self, validated_data):
+        """
+        Создание или обновление пользователя на основе Telegram ID.
+        """
+        telegram_id = validated_data['id']
+        username = validated_data.get('username', f"user_{telegram_id}")
+        first_name = validated_data.get('first_name', "")
+
+        # Создаем пользователя или обновляем его данные
+        user, created = CustomUser.objects.get_or_create(
+            telegram_id=telegram_id,
+            defaults={'email': f"{telegram_id}@telegram.local", 'username': username}
+        )
+        if not created:
+            user.username = username
+            user.save()
+
+        return user

@@ -9,64 +9,120 @@ from django.utils.timezone import now
 import logging
 logger = logging.getLogger(__name__)
 
+# class CustomUserManager(BaseUserManager):
+#     def create_user(self, email, password=None, **extra_fields):
+#         if not email:
+#             raise ValueError('The Email field must be set')
+#         email = self.normalize_email(email)
+#         user = self.model(email=email, **extra_fields)
+#         user.set_password(password)
+#         user.save(using=self._db)
+#
+#         if user.is_psychologist:
+#             # Если админ/код при создании сразу ставит is_psychologist=True
+#             PsychologistProfile.objects.create(user=user)
+#         else:
+#             # Если просто клиент
+#             ClientProfile.objects.create(email=user)
+#
+#         return user
+#
+#     def create_superuser(self, email, password=None, **extra_fields):
+#         extra_fields.setdefault('is_staff', True)
+#         extra_fields.setdefault('is_superuser', True)
+#         return self.create_user(email, password, **extra_fields)
 class CustomUserManager(BaseUserManager):
-    def create_user(self, email, password=None, **extra_fields):
-        if not email:
-            raise ValueError('The Email field must be set')
-        email = self.normalize_email(email)
-        user = self.model(email=email, **extra_fields)
-        user.set_password(password)
+    def create_user(self, telegram_id=None, email=None, password=None, **extra_fields):
+        if not telegram_id:
+            raise ValueError('The Telegram ID must be set for widget registration')
+
+        # Email остаётся опциональным
+        email = self.normalize_email(email) if email else None
+        user = self.model(telegram_id=telegram_id, email=email, **extra_fields)
+
+        if password:
+            user.set_password(password)
         user.save(using=self._db)
 
+        # Создаем профиль в зависимости от роли
         if user.is_psychologist:
-            # Если админ/код при создании сразу ставит is_psychologist=True
-            PsychologistProfile.objects.create(user=user)
+            PsychologistProfile.objects.get_or_create(user=user)
         else:
-            # Если просто клиент
-            ClientProfile.objects.create(email=user)
+            ClientProfile.objects.get_or_create(email=user)
 
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
-        return self.create_user(email, password, **extra_fields)
+        return self.create_user(email=email, password=password, **extra_fields)
 
 
 class CustomUser(AbstractBaseUser):
-    email = models.EmailField(unique=True)
-    telegram_id = models.BigIntegerField(null=True, blank=True)
+    telegram_id = models.BigIntegerField(unique=True, null=False)  # Telegram ID обязателен
+    email = models.EmailField(unique=True, null=True, blank=True)  # Email остаётся необязательным
     is_psychologist = models.BooleanField(default=False)
-    wants_to_be_psychologist = models.BooleanField(default=False)  # Ставится в True, если «кандидат»
+    wants_to_be_psychologist = models.BooleanField(default=False)
 
-    # Поля, нужные для админки
+    # Поля для админки
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
 
-    # Виртуальная валюта / баланс
+    # Баланс
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     objects = CustomUserManager()
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    USERNAME_FIELD = 'telegram_id'  # Основной идентификатор — Telegram ID
+    REQUIRED_FIELDS = []  # Нет обязательных полей для регистрации через Telegram
 
     def __str__(self):
-        return self.email
+        return self.email or f"Telegram User {self.telegram_id}"
 
     @property
     def role(self):
-        if self.is_psychologist:
-            return 'PSYCHOLOGIST'
-        return 'CLIENT'
+        return 'PSYCHOLOGIST' if self.is_psychologist else 'CLIENT'
 
     def has_perm(self, perm, obj=None):
-        """Обеспечивает проверку наличия конкретного разрешения."""
         return self.is_superuser
 
     def has_module_perms(self, app_label):
-        """Обеспечивает доступ к приложениям."""
         return self.is_superuser
+#
+# class CustomUser(AbstractBaseUser):
+#     email = models.EmailField(unique=True)
+#     telegram_id = models.BigIntegerField(null=True, blank=True)
+#     is_psychologist = models.BooleanField(default=False)
+#     wants_to_be_psychologist = models.BooleanField(default=False)  # Ставится в True, если «кандидат»
+#
+#     # Поля, нужные для админки
+#     is_staff = models.BooleanField(default=False)
+#     is_superuser = models.BooleanField(default=False)
+#
+#     # Виртуальная валюта / баланс
+#     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+#
+#     objects = CustomUserManager()
+#
+#     USERNAME_FIELD = 'email'
+#     REQUIRED_FIELDS = []
+#
+#     def __str__(self):
+#         return self.email
+#
+#     @property
+#     def role(self):
+#         if self.is_psychologist:
+#             return 'PSYCHOLOGIST'
+#         return 'CLIENT'
+#
+#     def has_perm(self, perm, obj=None):
+#         """Обеспечивает проверку наличия конкретного разрешения."""
+#         return self.is_superuser
+#
+#     def has_module_perms(self, app_label):
+#         """Обеспечивает доступ к приложениям."""
+#         return self.is_superuser
 
 
 #профиль клиента
