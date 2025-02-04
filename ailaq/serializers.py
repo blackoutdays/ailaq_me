@@ -11,44 +11,6 @@ from django.contrib.auth.password_validation import validate_password
 
 CustomUser = get_user_model()
 
-# class CustomUserCreationSerializer(serializers.ModelSerializer):
-#     password = serializers.CharField(write_only=True)
-#     role = serializers.CharField(read_only=True)  # role доступно только для чтения
-#
-#     class Meta:
-#         model = CustomUser
-#         fields = ['email', 'password', 'is_psychologist', 'role']
-#
-#     def create(self, validated_data):
-#         is_psychologist = validated_data.get('is_psychologist', False)
-#
-#         print(f"Received is_psychologist: {is_psychologist}")  # Лог для проверки
-#
-#         # Создание пользователя
-#         user = CustomUser.objects.create_user(
-#             email=validated_data['email'],
-#             password=validated_data['password'],
-#             is_psychologist=is_psychologist,
-#         )
-#
-#         if is_psychologist:
-#             user.wants_to_be_psychologist = True
-#             user.save()
-#
-#             # Проверяем существование заявки
-#             PsychologistApplication.objects.get_or_create(
-#                 user=user,
-#                 defaults={'status': 'PENDING'}
-#             )
-#
-#             # Проверяем существование профиля
-#             PsychologistProfile.objects.get_or_create(
-#                 user=user,
-#                 defaults={'is_verified': False, 'is_in_catalog': False}
-#             )
-#
-#         return user
-
 class CustomUserCreationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, min_length=8)
     password_confirm = serializers.CharField(write_only=True, required=True)
@@ -58,9 +20,6 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
         fields = ['telegram_id', 'email', 'password', 'password_confirm', 'is_psychologist']
 
     def validate(self, data):
-        """
-        Проверяем, что введённые пароли совпадают и удовлетворяют требованиям.
-        """
         password = data.get('password')
         password_confirm = data.get('password_confirm')
 
@@ -68,7 +27,6 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"password_confirm": "Пароли не совпадают."})
 
         try:
-            # Используем встроенную систему Django для валидации пароля
             validate_password(password)
         except ValidationError as e:
             raise serializers.ValidationError({"password": list(e.messages)})
@@ -76,15 +34,16 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        """
-        Создаём пользователя с проверенным паролем.
-        """
-        validated_data.pop('password_confirm')  # Убираем поле, так как оно не нужно для создания пользователя
+        validated_data.pop('password_confirm')
         password = validated_data.pop('password')
-        user = CustomUser.objects.create_user(password=password, **validated_data)
+        user = CustomUser(**validated_data)
+        user.set_password(password)
+
+        # Генерация verification_code
+        user.verification_code = CustomUser.objects.generate_unique_verification_code()
+
+        user.save()
         return user
-
-
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -184,8 +143,7 @@ class PsychologistLevelSerializer(serializers.ModelSerializer):
 # Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):
     psychologist_name = serializers.ReadOnlyField(source='psychologist_id.user.email')
-    client_name = serializers.ReadOnlyField(source='client_id.email')
-
+    client_name = serializers.ReadOnlyField(source='client.user.email')
     class Meta:
         model = Review
         fields = [

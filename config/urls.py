@@ -5,7 +5,7 @@ from drf_spectacular.views import SpectacularSwaggerView, SpectacularAPIView
 from ailaq.views import LoginView, RegisterUserView, SubmitPsychologistApplicationView, AdminApprovePsychologistView, \
     UpdatePsychologistProfileView, CatalogView, BuyRequestsView, PsychologistProfileViewSet, PsychologistProfileView, \
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewListCreateView, \
-    ReviewDetailView, TelegramAuthView
+    ReviewDetailView, TelegramAuthView, LinkTelegramView, VerificationCodeView, NewVerificationCodeView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -36,7 +36,10 @@ urlpatterns = [
     path('reviews/', ReviewListCreateView.as_view(), name='review-list-create'),
     path('reviews/<int:pk>/', ReviewDetailView.as_view(), name='review-detail'),
     path('auth/telegram/', TelegramAuthView.as_view(), name='telegram_auth'),
-    path("telegram-login/", lambda request: render(request, "telegram_auth.html"), name="telegram-login"),
+    path('telegram-login/', lambda request: render(request, "telegram_auth.html"), name="telegram-login"),
+    path('link-telegram/', LinkTelegramView.as_view(), name='link_telegram'),
+    path('verification-code/', VerificationCodeView.as_view(), name='verification_code'),
+    path('new-verification-code/', NewVerificationCodeView.as_view(), name='new_verification_code')
 ]
 
 if settings.DEBUG:

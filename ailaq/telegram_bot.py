@@ -2,15 +2,8 @@ import logging
 import os
 import django
 from django.contrib.auth import get_user_model
-
 from config import settings
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
-
 import nest_asyncio
-nest_asyncio.apply()
-
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -19,12 +12,21 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+import requests
+from asgiref.sync import sync_to_async
 from ailaq.models import Session, Review, PsychologistProfile, ClientProfile
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+django.setup()
+
+nest_asyncio.apply()
 
 # Логирование
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+
+BACKEND_URL = "http://localhost:8000/link-telegram/"  # Укажите URL вашего эндпоинта
 
 User = get_user_model()
 
@@ -40,62 +42,59 @@ PSYCHOLOGIST_COMMANDS = [
     ["Посмотреть заявки на сессии"],
 ]
 
+async def handle_verification_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_input = update.message.text.split(' ')
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    telegram_id = update.effective_chat.id  # Числовой Telegram ID
-    email = context.args[0] if context.args else None  # Ожидаем email как аргумент
+    if len(user_input) != 2:
+        await update.message.reply_text("Пожалуйста, введите код в формате: /code <ваш_код>")
+        return
+
+    verification_code = user_input[1]
+    telegram_id = update.effective_chat.id
 
     try:
-        if not email:
-            await update.message.reply_text("Ошибка: Укажите email в формате /start your_email@example.com")
-            return
+        # Отправляем запрос на привязку Telegram ID
+        response = requests.post(
+            f"{BACKEND_URL}",
+            json={
+                "verification_code": verification_code,
+                "telegram_id": telegram_id
+            }
+        )
 
-        # Найти пользователя по email
-        user = User.objects.get(email=email)
-
-        # Сохранить Telegram ID в зависимости от роли
-        if user.is_psychologist:
-            if user.psychologist_profile.telegram_id:
-                await update.message.reply_text("Ваш Telegram ID уже сохранён.")
-            else:
-                user.psychologist_profile.telegram_id = telegram_id
-                user.psychologist_profile.save()
-                await update.message.reply_text(
-                    "Добро пожаловать, психолог!\nВаш Telegram ID сохранён.",
-                    reply_markup=ReplyKeyboardMarkup(PSYCHOLOGIST_COMMANDS, one_time_keyboard=True),
-                )
+        # Обрабатываем ответ
+        if response.status_code == 200:
+            await update.message.reply_text("Ваш Telegram ID успешно привязан!")
         else:
-            if user.clientprofile.telegram_id:
-                await update.message.reply_text("Ваш Telegram ID уже сохранён.")
-            else:
-                user.clientprofile.telegram_id = telegram_id
-                user.clientprofile.save()
-                await update.message.reply_text(
-                    "Добро пожаловать, клиент!\nВаш Telegram ID сохранён.",
-                    reply_markup=ReplyKeyboardMarkup(CLIENT_COMMANDS, one_time_keyboard=True),
-                )
-    except User.DoesNotExist:
-        await update.message.reply_text("Ошибка: Пользователь с таким email не найден.")
+            error_message = response.json().get('error', 'Неправильный код')
+            await update.message.reply_text(f"Ошибка: {error_message}")
+
     except Exception as e:
         logging.exception(e)
-        await update.message.reply_text("Произошла ошибка. Попробуйте ещё раз.")
+        await update.message.reply_text("Произошла ошибка при привязке Telegram ID. Попробуйте ещё раз.")
+
+
+async def get_psychologist_profile(telegram_id):
+    return await sync_to_async(PsychologistProfile.objects.get)(telegram_id=telegram_id)
+
+
+async def get_client_profile(telegram_id):
+    return await sync_to_async(ClientProfile.objects.get)(telegram_id=telegram_id)
+
 
 async def schedule_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Введите ID психолога для назначения сессии.")
 
 
 async def process_session_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    psychologist_id = update.message.text  # Telegram ID психолога
-    client_id = update.effective_chat.id  # Telegram ID клиента
+    psychologist_id = update.message.text
+    client_id = update.effective_chat.id
 
     try:
-        # Найти психолога по `telegram_id`
-        psychologist_profile = PsychologistProfile.objects.get(telegram_id=int(psychologist_id))
-        # Найти клиента по `telegram_id`
-        client_profile = ClientProfile.objects.get(telegram_id=client_id)
+        psychologist_profile = await get_psychologist_profile(int(psychologist_id))
+        client_profile = await get_client_profile(client_id)
 
-        # Создать заявку на сессию
-        Session.objects.create(
+        await sync_to_async(Session.objects.create)(
             psychologist=psychologist_profile,
             client=client_profile,
             status="SCHEDULED",
@@ -122,9 +121,11 @@ async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     client_id = update.effective_chat.id
 
     try:
-        client = User.objects.get(clientprofile__telegram_id=client_id)
-        session = Session.objects.filter(client=client.clientprofile, status="COMPLETED").latest("end_time")
-        Review.objects.create(session=session, text=review_text, rating=5)
+        client = await sync_to_async(User.objects.get)(clientprofile__telegram_id=client_id)
+        session = await sync_to_async(Session.objects.filter)(
+            client=client.clientprofile, status="COMPLETED"
+        ).latest("end_time")
+        await sync_to_async(Review.objects.create)(session=session, text=review_text, rating=5)
         await update.message.reply_text("Спасибо за ваш отзыв! Он будет передан психологу.")
     except (User.DoesNotExist, Session.DoesNotExist):
         await update.message.reply_text("Ошибка: У вас нет завершённых сессий.")
@@ -133,9 +134,11 @@ async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def view_active_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_chat.id
     try:
-        psychologist = User.objects.get(psychologist_profile__telegram_id=telegram_id)
-        active_sessions = psychologist.psychologist_profile.sessions.filter(status="SCHEDULED")
-        if active_sessions.exists():
+        psychologist = await sync_to_async(User.objects.get)(psychologist_profile__telegram_id=telegram_id)
+        active_sessions = await sync_to_async(list)(
+            psychologist.psychologist_profile.sessions.filter(status="SCHEDULED")
+        )
+        if active_sessions:
             message = "\n".join([f"Клиент: {s.client.email}, Дата: {s.start_time}" for s in active_sessions])
             await update.message.reply_text(f"Ваши активные заявки:\n{message}")
         else:
@@ -147,9 +150,11 @@ async def view_active_requests(update: Update, context: ContextTypes.DEFAULT_TYP
 async def view_completed_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     telegram_id = update.effective_chat.id
     try:
-        psychologist = User.objects.get(psychologist_profile__telegram_id=telegram_id)
-        completed_sessions = psychologist.psychologist_profile.sessions.filter(status="COMPLETED")
-        if completed_sessions.exists():
+        psychologist = await sync_to_async(User.objects.get)(psychologist_profile__telegram_id=telegram_id)
+        completed_sessions = await sync_to_async(list)(
+            psychologist.psychologist_profile.sessions.filter(status="COMPLETED")
+        )
+        if completed_sessions:
             message = "\n".join([f"Клиент: {s.client.email}, Отзыв: {s.review.text}" for s in completed_sessions])
             await update.message.reply_text(f"Ваши завершённые сессии:\n{message}")
         else:
@@ -161,7 +166,7 @@ async def view_completed_sessions(update: Update, context: ContextTypes.DEFAULT_
 async def main() -> None:
     application = ApplicationBuilder().token(settings.TELEGRAM_BOT_TOKEN).build()
 
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("code", handle_verification_code))
     application.add_handler(MessageHandler(filters.Regex("Назначить сессию"), schedule_session))
     application.add_handler(MessageHandler(filters.Regex("Оставить отзыв"), leave_review))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_session_request))
@@ -170,6 +175,7 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.Regex("Посмотреть заявки на сессии"), view_completed_sessions))
 
     await application.run_polling()
+
 
 if __name__ == "__main__":
     import asyncio

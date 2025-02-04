@@ -1,54 +1,41 @@
-from django.contrib.auth.base_user import AbstractBaseUser
-from django.db import models
-from django.contrib.auth.models import BaseUserManager
+from django.utils.timezone import now, timedelta
 from ailaq.emails import send_approval_email, send_rejection_email
 from django.db.models import Avg
 from django.conf import settings
-from django.utils.timezone import now
+from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
+import random
 
 import logging
 logger = logging.getLogger(__name__)
 
-# class CustomUserManager(BaseUserManager):
-#     def create_user(self, email, password=None, **extra_fields):
-#         if not email:
-#             raise ValueError('The Email field must be set')
-#         email = self.normalize_email(email)
-#         user = self.model(email=email, **extra_fields)
-#         user.set_password(password)
-#         user.save(using=self._db)
-#
-#         if user.is_psychologist:
-#             # Если админ/код при создании сразу ставит is_psychologist=True
-#             PsychologistProfile.objects.create(user=user)
-#         else:
-#             # Если просто клиент
-#             ClientProfile.objects.create(email=user)
-#
-#         return user
-#
-#     def create_superuser(self, email, password=None, **extra_fields):
-#         extra_fields.setdefault('is_staff', True)
-#         extra_fields.setdefault('is_superuser', True)
-#         return self.create_user(email, password, **extra_fields)
 class CustomUserManager(BaseUserManager):
-    def create_user(self, telegram_id=None, email=None, password=None, **extra_fields):
-        if not telegram_id:
-            raise ValueError('The Telegram ID must be set for widget registration')
+    def create_user(self, email=None, password=None, telegram_id=None, **extra_fields):
+        if not email and not telegram_id:
+            raise ValueError('Either Telegram ID or Email must be provided for registration.')
 
-        # Email остаётся опциональным
+        # Генерация уникального кода при создании пользователя
+        verification_code = self.generate_unique_verification_code()
+
+        # Нормализация email
         email = self.normalize_email(email) if email else None
-        user = self.model(telegram_id=telegram_id, email=email, **extra_fields)
+
+        user = self.model(
+            email=email,
+            telegram_id=telegram_id,
+            verification_code=verification_code,
+            **extra_fields
+        )
 
         if password:
             user.set_password(password)
         user.save(using=self._db)
 
-        # Создаем профиль в зависимости от роли
+        # Создаем профиль автоматически
         if user.is_psychologist:
             PsychologistProfile.objects.get_or_create(user=user)
         else:
-            ClientProfile.objects.get_or_create(email=user)
+            ClientProfile.objects.get_or_create(user=user)
 
         return user
 
@@ -57,24 +44,48 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         return self.create_user(email=email, password=password, **extra_fields)
 
+    @staticmethod
+    def generate_unique_verification_code():
+        for _ in range(10):  # Попытки до 10 раз
+            code = str(random.randint(1000, 9999))
+            if not CustomUser.objects.filter(verification_code=code).exists():
+                return code
+        raise ValueError("Could not generate a unique verification code")
 
 class CustomUser(AbstractBaseUser):
-    telegram_id = models.BigIntegerField(unique=True, null=False)  # Telegram ID обязателен
-    email = models.EmailField(unique=True, null=True, blank=True)  # Email остаётся необязательным
+    telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
+    email = models.EmailField(unique=True, null=True, blank=True)
+    verification_code = models.CharField(max_length=4, unique=True, null=True, blank=True)
+    verification_code_expiration = models.DateTimeField(null=True, blank=True)  # Дата истечения
+
     is_psychologist = models.BooleanField(default=False)
     wants_to_be_psychologist = models.BooleanField(default=False)
 
-    # Поля для админки
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
-
-    # Баланс
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     objects = CustomUserManager()
 
-    USERNAME_FIELD = 'telegram_id'  # Основной идентификатор — Telegram ID
-    REQUIRED_FIELDS = []  # Нет обязательных полей для регистрации через Telegram
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []
+
+    def generate_verification_code(self):
+        """Генерация нового кода и обновление срока действия."""
+        self.verification_code = str(random.randint(1000, 9999))
+        self.verification_code_expiration = now() + timedelta(minutes=10)
+        self.save()  # Сохраняем изменения
+
+    def generate_new_verification_code(self):
+        """Генерация нового уникального кода."""
+        for _ in range(10):  # Попытки до 10 раз
+            new_code = str(random.randint(1000, 9999))
+            if not CustomUser.objects.filter(verification_code=new_code).exists():
+                self.verification_code = new_code
+                self.verification_code_expiration = now() + timedelta(minutes=10)
+                self.save()
+                return new_code
+        raise ValueError("Could not generate a new unique verification code")
 
     def __str__(self):
         return self.email or f"Telegram User {self.telegram_id}"
@@ -88,51 +99,40 @@ class CustomUser(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return self.is_superuser
-#
-# class CustomUser(AbstractBaseUser):
-#     email = models.EmailField(unique=True)
-#     telegram_id = models.BigIntegerField(null=True, blank=True)
-#     is_psychologist = models.BooleanField(default=False)
-#     wants_to_be_psychologist = models.BooleanField(default=False)  # Ставится в True, если «кандидат»
-#
-#     # Поля, нужные для админки
-#     is_staff = models.BooleanField(default=False)
-#     is_superuser = models.BooleanField(default=False)
-#
-#     # Виртуальная валюта / баланс
-#     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-#
-#     objects = CustomUserManager()
-#
-#     USERNAME_FIELD = 'email'
-#     REQUIRED_FIELDS = []
-#
-#     def __str__(self):
-#         return self.email
-#
-#     @property
-#     def role(self):
-#         if self.is_psychologist:
-#             return 'PSYCHOLOGIST'
-#         return 'CLIENT'
-#
-#     def has_perm(self, perm, obj=None):
-#         """Обеспечивает проверку наличия конкретного разрешения."""
-#         return self.is_superuser
-#
-#     def has_module_perms(self, app_label):
-#         """Обеспечивает доступ к приложениям."""
-#         return self.is_superuser
 
 
-#профиль клиента
 class ClientProfile(models.Model):
-    email = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
-    whatsapp_id = models.CharField(max_length=20, null=True, blank=True)
-    telegram_id = models.BigIntegerField(null=True, blank=True)
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='client_profile')
 
     def __str__(self):
-        return f"ClientProfile for {self.email.email}"
+        return f"ClientProfile for {self.user.email or self.user.telegram_id}"
+
+    @property
+    def telegram_id(self):
+        return self.user.telegram_id
+
+
+class QuickConsultationRequest(models.Model):
+    client_name = models.CharField(max_length=255)
+    client_age = models.PositiveIntegerField()
+    preferred_psychologist_age = models.PositiveIntegerField(null=True, blank=True)
+    psychologist_gender = models.CharField(
+        max_length=10,
+        choices=[('MALE', 'Male'), ('FEMALE', 'Female'), ('ANY', 'Any')],
+        default='ANY'
+    )
+    psychologist_language = models.CharField(
+        max_length=10,
+        choices=[('RU', 'Russian'), ('EN', 'English'), ('KZ', 'Kazakh')],
+        default='RU'
+    )
+    topic = models.CharField(max_length=255, help_text="Тема, например, депрессия, тревожность и т.д.")
+    comments = models.TextField(null=True, blank=True)
+    telegram_id = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Consultation request from {self.client_name}"
 
 
 class PsychologistLevel(models.Model):
@@ -163,16 +163,8 @@ class PsychologistApplication(models.Model):
 
     # Личная информация
     first_name_ru = models.CharField(max_length=50, null=True, blank=True)
-    # first_name_en = models.CharField(max_length=50, null=True, blank=True)
-    # first_name_kz = models.CharField(max_length=50, null=True, blank=True)
-
     last_name_ru = models.CharField(max_length=50, null=True, blank=True)
-    # last_name_en = models.CharField(max_length=50, null=True, blank=True)
-    # last_name_kz = models.CharField(max_length=50, null=True, blank=True)
-
     middle_name_ru = models.CharField(max_length=50, null=True, blank=True)
-    # middle_name_en = models.CharField(max_length=50, null=True, blank=True)
-    # middle_name_kz = models.CharField(max_length=50, null=True, blank=True)
 
     age = models.IntegerField(null=True, blank=True)
 
@@ -197,18 +189,12 @@ class PsychologistApplication(models.Model):
 
     #обо мне
     about_me_ru = models.TextField(null=True, blank=True)
-    # about_me_en = models.TextField(null=True, blank=True)
-    # about_me_kz = models.TextField(null=True, blank=True)
 
     # Каталоговое описание психолога (будет отображаться в каталоге)
     catalog_description_ru = models.TextField(null=True, blank=True)
-    # catalog_description_en = models.TextField(null=True, blank=True)
-    # catalog_description_kz = models.TextField(null=True, blank=True)
 
     # Чем сможете помочь (текстовое поле)
     help_text_ru = models.TextField(null=True, blank=True)
-    # help_text_en = models.TextField(null=True, blank=True)
-    # help_text_kz = models.TextField(null=True, blank=True)
 
     # Квалификация (специализация)
     qualification = models.CharField(max_length=100, null=True, blank=True)  # Например "Психолог"
@@ -305,11 +291,9 @@ class PsychologistApplication(models.Model):
     def __str__(self):
         return f"PsychologistApplication for {self.user.email}"
 
-
 #профиль психолога
 class PsychologistProfile(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="psychologist_profile", unique=True)
-    telegram_id = models.BigIntegerField(null=True, blank=True)
     application = models.OneToOneField(
         PsychologistApplication,
         on_delete=models.CASCADE,
@@ -325,6 +309,9 @@ class PsychologistProfile(models.Model):
     def __str__(self):
         return f"PsychologistProfile for {self.user.email}"
 
+    @property
+    def telegram_id(self):
+        return self.user.telegram_id
 
     def update_catalog_status(self):
         """Обновляет статус `is_in_catalog` на основе метода `can_be_in_catalog`."""
