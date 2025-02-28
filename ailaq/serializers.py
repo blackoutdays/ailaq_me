@@ -1,13 +1,14 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
-    Review, BuyRequest
+    Review, BuyRequest, Topic, QuickConsultationRequest
 from django.conf import settings
 from hashlib import sha256
 import hmac
 import time
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
+import random
 
 CustomUser = get_user_model()
 
@@ -105,7 +106,6 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
             for review in reviews
         ]
 
-
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistApplication
@@ -126,7 +126,6 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
-
 
 # Профиль клиента
 class ClientProfileSerializer(serializers.ModelSerializer):
@@ -156,7 +155,6 @@ class ReviewSerializer(serializers.ModelSerializer):
             'text',
             'created_at',
         ]
-
 
 class CatalogSerializer(serializers.ModelSerializer):
     first_name_ru = serializers.SerializerMethodField()
@@ -231,7 +229,6 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
             'communication_language', 'gender', 'city', 'telegram_id', 'email',
             'about_me_ru', 'catalog_description_ru'
         ]
-
 
 # Квалификация психолога
 class QualificationSerializer(serializers.ModelSerializer):
@@ -322,3 +319,41 @@ class TelegramAuthSerializer(serializers.Serializer):
             user.save()
 
         return user
+
+
+class TopicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Topic
+        fields = '__all__'
+
+
+class QuickConsultationRequestSerializer(serializers.ModelSerializer):
+    additional_topics = TopicSerializer(many=True, required=False, help_text="Список дополнительных тем")
+    client_name = serializers.CharField(help_text="Имя клиента, как к вам обращаться")
+    birth_date = serializers.DateField(help_text="Дата рождения клиента")
+    gender = serializers.ChoiceField(
+        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
+        help_text="Пол клиента"
+    )
+    psychologist_language = serializers.ChoiceField(
+        choices=[('RU', 'Русский'), ('EN', 'Английский'), ('KZ', 'Казахский')],
+        help_text="Предпочтительный язык общения"
+    )
+    verification_code = serializers.CharField(read_only=True, help_text="Код для привязки Telegram")
+
+    class Meta:
+        model = QuickConsultationRequest
+        fields = [
+            'client_name', 'birth_date', 'gender', 'psychologist_language',
+            'preferred_psychologist_age', 'psychologist_gender', 'topic',
+            'comments', 'additional_topics', 'verification_code'
+        ]
+
+    def create(self, validated_data):
+        topics_data = validated_data.pop('additional_topics', [])
+        verification_code = str(random.randint(1000, 9999))
+        consultation_request = QuickConsultationRequest.objects.create(
+            verification_code=verification_code, **validated_data
+        )
+        consultation_request.additional_topics.set(topics_data)
+        return consultation_request

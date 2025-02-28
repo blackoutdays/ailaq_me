@@ -1,10 +1,15 @@
 import logging
 import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+
 import django
+django.setup()
+
 from django.contrib.auth import get_user_model
 from config import settings
+
 import nest_asyncio
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -16,21 +21,16 @@ import requests
 from asgiref.sync import sync_to_async
 from ailaq.models import Session, Review, PsychologistProfile, ClientProfile
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
-
 nest_asyncio.apply()
 
-# Логирование
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-BACKEND_URL = "http://localhost:8000/link-telegram/"  # Укажите URL вашего эндпоинта
+BACKEND_URL = "http://localhost:8000/link-telegram/"
 
 User = get_user_model()
 
-# Команды для клиента
 CLIENT_COMMANDS = [
     ["Назначить сессию"],
     ["Оставить отзыв"],

@@ -9,3 +9,5 @@ django-cors-headers==4.6.0
 gunicorn==22.0.0
 Pillow==11.1.0
 django-filter>=2.4
+django-environ
+psycopg2-binary

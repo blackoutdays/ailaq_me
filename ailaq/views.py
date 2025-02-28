@@ -14,22 +14,24 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
 from config import settings
 from .models import PsychologistProfile, PsychologistApplication, PurchasedRequest, ClientProfile, CustomUser, \
-    PsychologistFAQ, Review, Session, QuickConsultationRequest
+    PsychologistFAQ, Review, Session, QuickConsultationRequest, Topic
 from .serializers import (
     CustomUserCreationSerializer,
     LoginSerializer,
     PsychologistProfileSerializer,
     PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
     BuyRequestSerializer, PersonalInfoSerializer, QualificationSerializer, DocumentSerializer,
-    FAQSerializer, FAQListSerializer, TelegramAuthSerializer,
+    FAQSerializer, FAQListSerializer, TopicSerializer, QuickConsultationRequestSerializer
 )
 from .permissions import IsVerifiedPsychologist
 from .pagination import StandardResultsSetPagination
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-
+import telegram
 import logging
 logger = logging.getLogger(__name__)
+
+bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
 # Регистрация пользователя
 @method_decorator(csrf_exempt, name='dispatch')
@@ -97,32 +99,27 @@ class LoginView(APIView):
                 )
         return Response({"error": "Invalid credentials."}, status=status.HTTP_400_BAD_REQUEST)
 
+class QuickConsultationViewSet(viewsets.ModelViewSet):
+    queryset = QuickConsultationRequest.objects.all()
+    serializer_class = QuickConsultationRequestSerializer
+    permission_classes = [IsAuthenticated]
 
-class QuickConsultationView(APIView):
-    def post(self, request):
+    @extend_schema(
+        summary="Создание заявки на консультацию",
+        description="Отправляет заявку на быструю консультацию и генерирует код для привязки Telegram.",
+        request=QuickConsultationRequestSerializer,
+        responses={201: QuickConsultationRequestSerializer, 400: "Ошибка запроса"}
+    )
+    def create(self, request, *args, **kwargs):
         data = request.data
-        existing_request = QuickConsultationRequest.objects.filter(
-            telegram_id=request.user.telegram_id if request.user.is_authenticated else None,
-            status='PENDING'
-        ).first()
-
-        if existing_request:
-            return Response({"error": "You already have a pending consultation request."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            consultation = QuickConsultationRequest.objects.create(
-                client_name=data['client_name'],
-                client_age=data['client_age'],
-                preferred_psychologist_age=data.get('preferred_psychologist_age'),
-                psychologist_gender=data['psychologist_gender'],
-                psychologist_language=data['psychologist_language'],
-                topic=data['topic'],
-                comments=data.get('comments'),
-                telegram_id=request.user.telegram_id if request.user.is_authenticated else None
-            )
-            return Response({"message": "Consultation request saved successfully."}, status=status.HTTP_201_CREATED)
-        except KeyError as e:
-            return Response({"error": f"Missing field: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            consultation_request = serializer.save()
+            return Response({
+                "message": "Consultation request saved successfully.",
+                "verification_code": consultation_request.verification_code
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class SubmitPsychologistApplicationView(APIView):
     permission_classes = [IsAuthenticated]
@@ -154,7 +151,6 @@ class SubmitPsychologistApplicationView(APIView):
                 status=status.HTTP_201_CREATED,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class AdminApprovePsychologistView(GenericAPIView):
     queryset = PsychologistApplication.objects.all()
@@ -248,7 +244,6 @@ class UpdatePsychologistProfileView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 # Список психологов с фильтрацией каталог
 class CatalogView(APIView):
@@ -662,9 +657,6 @@ class ReviewCreateView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
-
 class LinkTelegramView(APIView):
     def post(self, request):
         try:
@@ -693,8 +685,6 @@ class LinkTelegramView(APIView):
         except Exception as e:
             logger.error(f"Error linking Telegram: {str(e)}")
             return Response({"error": "Internal server error."}, status=500)
-
-
 
 class TelegramAuthView(APIView):
     @staticmethod
@@ -807,3 +797,39 @@ class NewVerificationCodeView(APIView):
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class QuickConsultationAPIView(APIView):
+
+    @extend_schema(
+        request=QuickConsultationRequestSerializer,
+        responses={201: QuickConsultationRequestSerializer},
+        description="Создание запроса на быструю консультацию и генерация ссылки на виджет Telegram."
+    )
+    def post(self, request):
+        serializer = QuickConsultationRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            consultation_request = serializer.save()
+
+            # Генерация ссылки для Telegram
+            redirect_url = f"https://t.me/{bot.get_me().username}?start=quick_{consultation_request.pk}"
+
+            # Дополнительно можем отправить сообщение пользователю через бота (если ID известен)
+            if consultation_request.telegram_id:
+                bot.send_message(
+                    chat_id=consultation_request.telegram_id,
+                    text=f"Ваша заявка принята. ID заявки: {consultation_request.pk}"
+                )
+
+            return Response(
+                {"message": "Заявка создана", "redirect_url": redirect_url},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TopicListView(APIView):
+    def get(self, request):
+        topics = Topic.objects.all()
+        serializer = TopicSerializer(topics, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

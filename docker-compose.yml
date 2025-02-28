@@ -4,6 +4,9 @@ services:
     command: bash -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
+      - ./static:/app/static
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
     ports:
       - "8000:8000"
     environment:
@@ -16,9 +19,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_DB: mydb
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ailaq
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
 
   nginx:
     image: nginx:alpine

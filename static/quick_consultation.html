@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Заявка на быструю консультацию</title>
+</head>
+<body>
+    <h1>Заявка на быструю консультацию</h1>
+
+    <!-- Форма для ввода данных -->
+    <form id="consultation-form">
+        <label>Как к вам обращаться:</label><br>
+        <input type="text" name="client_name" required><br><br>
+
+        <label>Дата рождения:</label><br>
+        <input type="date" name="birth_date" required><br><br>
+
+        <label>Пол:</label><br>
+        <select name="gender" required>
+            <option value="MALE">Мужской</option>
+            <option value="FEMALE">Женский</option>
+        </select><br><br>
+
+        <label>Предпочтительный возраст психолога:</label><br>
+        <select name="preferred_psychologist_age" required>
+            <option value="18-25">От 18 до 25</option>
+            <option value="25-35">От 25 до 35</option>
+            <option value="35+">От 35</option>
+        </select><br><br>
+
+        <label>Пол психолога:</label><br>
+        <select name="psychologist_gender" required>
+            <option value="MALE">Мужской</option>
+            <option value="FEMALE">Женский</option>
+        </select><br><br>
+
+        <label>Предпочтительный язык общения:</label><br>
+        <select name="psychologist_language" required>
+            <option value="RU">Русский</option>
+            <option value="EN">Английский</option>
+            <option value="KZ">Казахский</option>
+        </select><br><br>
+
+        <label>Основная тема:</label><br>
+        <input type="text" name="topic" required><br><br>
+
+        <label>Комментарии:</label><br>
+        <textarea name="comments" required></textarea><br><br>
+
+        <button type="submit">Отправить заявку</button>
+    </form>
+
+    <br>
+
+    <!-- Виджет Telegram для аутентификации -->
+    <div id="telegram-widget-container" style="display: none;">
+        <h3>Для подтверждения заявки войдите через Telegram:</h3>
+        <script async src="https://telegram.org/js/telegram-widget.js?7"
+                data-telegram-login="my_telegram_bot"
+                data-size="large"
+                data-auth-url="http://localhost:8000/api/telegram-auth/"
+                data-request-access="write"></script>
+    </div>
+
+    <script>
+        const form = document.getElementById('consultation-form');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Предотвращаем перезагрузку страницы
+
+            // Получаем ID Telegram (для примера здесь можно захватить реальный ID после Telegram-авторизации)
+            const telegramId = localStorage.getItem('telegram_id') || '123456';  // Замените на реальный механизм получения ID
+
+            // Собираем данные формы
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            // Добавляем Telegram ID в данные
+            data.telegram_id = telegramId;
+
+            try {
+                // Отправляем заявку на сервер
+                const response = await fetch('http://localhost:8000/api/quick-consultation/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    alert('Ошибка при создании заявки: ' + JSON.stringify(errorData));
+                    return;
+                }
+
+                const result = await response.json();
+                alert('Заявка успешно создана. Перейдите к виджету Telegram для подтверждения.');
+
+                // Показываем виджет Telegram для аутентификации
+                document.getElementById('telegram-widget-container').style.display = 'block';
+            } catch (err) {
+                alert('Ошибка сети: ' + err.message);
+            }
+        });
+    </script>
+</body>
+</html>

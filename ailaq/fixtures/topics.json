@@ -1,0 +1,30 @@
+[
+  {
+    "model": "ailaq.topic",
+    "pk": 1,
+    "fields": {
+      "name": "Тревожность"
+    }
+  },
+  {
+    "model": "ailaq.topic",
+    "pk": 2,
+    "fields": {
+      "name": "Депрессия"
+    }
+  },
+  {
+    "model": "ailaq.topic",
+    "pk": 3,
+    "fields": {
+      "name": "Потеря близкого"
+    }
+  },
+  {
+    "model": "ailaq.topic",
+    "pk": 4,
+    "fields": {
+      "name": "Расстройство пищевого поведения"
+    }
+  }
+]

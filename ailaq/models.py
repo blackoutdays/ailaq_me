@@ -112,27 +112,54 @@ class ClientProfile(models.Model):
         return self.user.telegram_id
 
 
+class Topic(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="Название темы")
+
+    def __str__(self):
+        return self.name
+
+
 class QuickConsultationRequest(models.Model):
-    client_name = models.CharField(max_length=255)
-    client_age = models.PositiveIntegerField()
-    preferred_psychologist_age = models.PositiveIntegerField(null=True, blank=True)
+    client_name = models.CharField(max_length=255, verbose_name="Как к вам обращаться?")
+    birth_date = models.DateField(verbose_name="Дата рождения")
+    gender = models.CharField(
+        max_length=10,
+        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
+        verbose_name="Пол"
+    )
+    preferred_psychologist_age = models.CharField(
+        max_length=20,
+        choices=[('18-25', 'От 18 до 25'), ('25-35', 'От 25 до 35'), ('35+', 'От 35')],
+        verbose_name="Возраст специалиста"
+    )
     psychologist_gender = models.CharField(
         max_length=10,
-        choices=[('MALE', 'Male'), ('FEMALE', 'Female'), ('ANY', 'Any')],
-        default='ANY'
+        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
+        verbose_name="Пол специалиста"
     )
     psychologist_language = models.CharField(
         max_length=10,
-        choices=[('RU', 'Russian'), ('EN', 'English'), ('KZ', 'Kazakh')],
-        default='RU'
+        choices=[('RU', 'Русский'), ('EN', 'Английский'), ('KZ', 'Казахский')],
+        verbose_name="Язык общения"
     )
-    topic = models.CharField(max_length=255, help_text="Тема, например, депрессия, тревожность и т.д.")
-    comments = models.TextField(null=True, blank=True)
-    telegram_id = models.BigIntegerField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    topic = models.CharField(max_length=255, verbose_name="Основная тема")
+    additional_topics = models.ManyToManyField(
+        Topic,
+        related_name='consultations',
+        verbose_name="Дополнительные темы"
+    )
+    comments = models.TextField(verbose_name="Комментарий")
+    created_at = models.DateTimeField(default=now)
+    verification_code = models.CharField(max_length=6, unique=True, blank=True, null=True,
+                                         verbose_name="Код подтверждения")
+
+    def save(self, *args, **kwargs):
+        if not self.verification_code:
+            self.verification_code = str(random.randint(100000, 999999))
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Consultation request from {self.client_name}"
+        return f"Заявка от {self.client_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
 
 class PsychologistLevel(models.Model):
@@ -441,7 +468,6 @@ class PsychologistFAQ(models.Model):
 
     def __str__(self):
         return f"FAQ: {self.question[:50]}..."
-
 
 class BuyRequest(models.Model):
     psychologist = models.ForeignKey(PsychologistProfile, on_delete=models.CASCADE, related_name='buy_requests')

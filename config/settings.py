@@ -1,18 +1,23 @@
 from pathlib import Path
 from datetime import timedelta
 import os
+import environ
+
+env = environ.Env(
+    DEBUG=(bool, False)
+)
+
+environ.Env.read_env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+SECRET_KEY = env('SECRET_KEY', default='change-me')
 
-SECRET_KEY = 'django-insecure-g55!wd@mx*15v0-(t7(s_0ru=^x8+pvgu-m^myrwlqepho91gl'
+DEBUG = env.bool("DEBUG", default=True)
 
-DEBUG = True
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=['*'])
 
-ALLOWED_HOSTS = ['*']
-
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -34,12 +39,12 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': 'your-secret-key',
+    'SIGNING_KEY': env('JWT_SECRET_KEY', default='change-me'),
     'VERIFYING_KEY': None,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True  # Для разрешения запросов с разных доменов
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"])  # Укажите нужные домены
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -84,8 +89,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env('POSTGRES_DB', default='ailaq'),
+        'USER': env('POSTGRES_USER', default='admin'),
+        'PASSWORD': env('POSTGRES_PASSWORD', default='admin'),
+        'HOST': env('POSTGRES_HOST', default='db'),
+        # 'HOST': 'localhost',
+        'PORT': env('POSTGRES_PORT', default='5432'),
     }
 }
 
@@ -95,6 +105,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 8},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -109,20 +120,25 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-CORS_ALLOW_ALL_ORIGINS = True  #  доступ с любых доменов
 CORS_ALLOW_CREDENTIALS = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  #  SMTP сервер для отправки писем
-EMAIL_HOST = 'smtp.gmail.com'  # Почтовый сервер Gmail
-EMAIL_PORT = 587  #  для TLS
-EMAIL_USE_TLS = True  #  безопасное соединение
-EMAIL_HOST_USER = 'aruka.larksss@gmail.com'  #  почтовый адрес Gmail
-EMAIL_HOST_PASSWORD = 'taee xbjt arjo zjch'  #  пароль для Gmail
-DEFAULT_FROM_EMAIL = 'aruka.larksss@gmail.com'  # Адрес отправителя
+# EMAIL SETTINGS
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='aruka.larksss@gmail.com')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='taee xbjt arjo zjch')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='aruka.larksss@gmail.com')
 
 LOGGING = {
     'version': 1,
@@ -149,46 +165,9 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': True,
 }
 
-TELEGRAM_BOT_TOKEN='7591573688:AAFtWbtZ4v5UcS1Hyl121gJlxLA8riIuB4Q'
+TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN', default='7591573688:AAFtWbtZ4v5UcS1Hyl121gJlxLA8riIuB4Q')
 AUTH_USER_MODEL = 'ailaq.CustomUser'
 
-REQUEST_COST = 10.00  # Стоимость одной заявки (пример для теста)
-ADMIN_EMAIL = "arukalarkins@icloud.com"  # Email для отправки уведомлений
-DEFAULT_CATALOG_REQUESTS_THRESHOLD = 3  # Минимум заявок для включения в каталог
-
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-        'OPTIONS': {
-            'min_length': 8,
-        },
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
-
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'handlers': {
-#         'file': {
-#             'level': 'DEBUG',
-#             'class': 'logging.FileHandler',
-#             'filename': 'django.log',
-#         },
-#     },
-#     'loggers': {
-#         'django': {
-#             'handlers': ['file'],
-#             'level': 'DEBUG',
-#             'propagate': True,
-#         },
-#     },
-# }
+REQUEST_COST = env.float('REQUEST_COST', default=10.00)
+ADMIN_EMAIL = env('ADMIN_EMAIL', default='aruka.larksss@gmail.com')
+DEFAULT_CATALOG_REQUESTS_THRESHOLD = env.int('DEFAULT_CATALOG_REQUESTS_THRESHOLD', default=3)

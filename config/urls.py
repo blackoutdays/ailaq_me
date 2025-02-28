@@ -5,7 +5,8 @@ from drf_spectacular.views import SpectacularSwaggerView, SpectacularAPIView
 from ailaq.views import LoginView, RegisterUserView, SubmitPsychologistApplicationView, AdminApprovePsychologistView, \
     UpdatePsychologistProfileView, CatalogView, BuyRequestsView, PsychologistProfileViewSet, PsychologistProfileView, \
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewListCreateView, \
-    ReviewDetailView, TelegramAuthView, LinkTelegramView, VerificationCodeView, NewVerificationCodeView
+    ReviewDetailView, TelegramAuthView, LinkTelegramView, VerificationCodeView, NewVerificationCodeView, \
+    QuickConsultationAPIView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -39,7 +40,8 @@ urlpatterns = [
     path('telegram-login/', lambda request: render(request, "telegram_auth.html"), name="telegram-login"),
     path('link-telegram/', LinkTelegramView.as_view(), name='link_telegram'),
     path('verification-code/', VerificationCodeView.as_view(), name='verification_code'),
-    path('new-verification-code/', NewVerificationCodeView.as_view(), name='new_verification_code')
+    path('new-verification-code/', NewVerificationCodeView.as_view(), name='new_verification_code'),
+    path('api/quick-consultation/', QuickConsultationAPIView.as_view(), name='quick_consultation_api'),
 ]
 
 if settings.DEBUG:
