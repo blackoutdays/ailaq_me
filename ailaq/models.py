@@ -72,20 +72,31 @@ class CustomUser(AbstractBaseUser):
 
     def generate_verification_code(self):
         """Генерация нового кода и обновление срока действия."""
-        self.verification_code = str(random.randint(1000, 9999))
-        self.verification_code_expiration = now() + timedelta(minutes=10)
-        self.save()  # Сохраняем изменения
-
-    def generate_new_verification_code(self):
-        """Генерация нового уникального кода."""
-        for _ in range(10):  # Попытки до 10 раз
-            new_code = str(random.randint(1000, 9999))
+        for _ in range(10):  # До 10 попыток генерации уникального кода
+            new_code = str(random.randint(1000, 9999))  # 4-значный код
             if not CustomUser.objects.filter(verification_code=new_code).exists():
                 self.verification_code = new_code
-                self.verification_code_expiration = now() + timedelta(minutes=10)
-                self.save()
+                self.verification_code_expiration = now() + timedelta(minutes=10)  # Устанавливаем срок
+                self.save(update_fields=['verification_code', 'verification_code_expiration'])
                 return new_code
-        raise ValueError("Could not generate a new unique verification code")
+        raise ValueError("Не удалось сгенерировать уникальный код подтверждения")
+
+    def generate_new_verification_code(self):
+        """
+        Генерирует новый уникальный код подтверждения (4 цифры).
+        Если сгенерированный код уже существует, метод делает до 10 попыток.
+        Код действителен 10 минут.
+        """
+        for _ in range(10):  # До 10 попыток генерации уникального кода
+            new_code = str(random.randint(1000, 9999))  # Генерируем 4-значный код
+            if not CustomUser.objects.filter(verification_code=new_code).exists():  # Проверяем уникальность
+                self.verification_code = new_code
+                self.verification_code_expiration = now() + timedelta(minutes=10)  # Устанавливаем срок действия
+                self.save(update_fields=['verification_code', 'verification_code_expiration'])  # Сохраняем изменения
+                return new_code
+
+        # Если после 10 попыток не удалось найти уникальный код, вызываем ошибку
+        raise ValueError("Не удалось сгенерировать уникальный код подтверждения")
 
     def __str__(self):
         return self.email or f"Telegram User {self.telegram_id}"
@@ -100,7 +111,6 @@ class CustomUser(AbstractBaseUser):
     def has_module_perms(self, app_label):
         return self.is_superuser
 
-
 class ClientProfile(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='client_profile')
 
@@ -111,15 +121,13 @@ class ClientProfile(models.Model):
     def telegram_id(self):
         return self.user.telegram_id
 
-
 class Topic(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="Название темы")
 
     def __str__(self):
         return self.name
 
-
-class QuickConsultationRequest(models.Model):
+class QuickClientConsultationRequest(models.Model):
     client_name = models.CharField(max_length=255, verbose_name="Как к вам обращаться?")
     birth_date = models.DateField(verbose_name="Дата рождения")
     gender = models.CharField(
@@ -144,7 +152,7 @@ class QuickConsultationRequest(models.Model):
     )
     topic = models.CharField(max_length=255, verbose_name="Основная тема")
     additional_topics = models.ManyToManyField(
-        Topic,
+        'Topic',
         related_name='consultations',
         verbose_name="Дополнительные темы"
     )
@@ -152,6 +160,9 @@ class QuickConsultationRequest(models.Model):
     created_at = models.DateTimeField(default=now)
     verification_code = models.CharField(max_length=6, unique=True, blank=True, null=True,
                                          verbose_name="Код подтверждения")
+
+    # 🔹 Добавляем telegram_id
+    telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID клиента")
 
     def save(self, *args, **kwargs):
         if not self.verification_code:
@@ -174,7 +185,6 @@ class PsychologistLevel(models.Model):
     def __str__(self):
         return self.name
 
-
 class EducationDocument(models.Model):
     psychologist_application = models.ForeignKey(
         'PsychologistApplication',
@@ -182,7 +192,11 @@ class EducationDocument(models.Model):
         on_delete=models.CASCADE
     )
     document = models.FileField(upload_to='education_documents/')
+    year = models.PositiveIntegerField(null=True, blank=True, help_text="Год получения документа")
+    title = models.CharField(max_length=255, null=True, blank=True, help_text="Название документа")
 
+    def __str__(self):
+        return f"{self.year} - {self.title}"
 
 # форма заявки/профиль (только для психолога)
 class PsychologistApplication(models.Model):
@@ -193,39 +207,40 @@ class PsychologistApplication(models.Model):
     last_name_ru = models.CharField(max_length=50, null=True, blank=True)
     middle_name_ru = models.CharField(max_length=50, null=True, blank=True)
 
-    age = models.IntegerField(null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)  # Дата рождения
 
-    language_choices = [
-        ('RU', 'Russian'),
-        ('EN', 'English'),
-        ('KZ', 'Kazakh'),
-    ]
-    communication_language = models.CharField(max_length=2, choices=language_choices, null=True, blank=True)
-
-    telegram_id = models.CharField(max_length=100, null=True, blank=True)  # Ник или айди в Telegram
-    city = models.CharField(max_length=100, null=True, blank=True)  # Город
-    email = models.EmailField(null=True, blank=True)  # Электронный адрес
-
-    # Пол
     gender_choices = [
-        ('MALE', 'Male'),
-        ('FEMALE', 'Female'),
-        ('OTHER', 'Other'),
+        ('MALE', 'Мужской'),
+        ('FEMALE', 'Женский'),
+        ('OTHER', 'Другой'),
     ]
     gender = models.CharField(max_length=6, choices=gender_choices, null=True, blank=True)
 
-    #обо мне
+    language_choices = [
+        ('RU', 'Русский'),
+        ('EN', 'Английский'),
+        ('KZ', 'Казахский'),
+    ]
+    communication_language = models.CharField(max_length=2, choices=language_choices, null=True, blank=True)
+
+    # **Страна и город приема (список с фронта)**
+    service_countries = models.JSONField(default=list, blank=True, help_text="Список стран приема")
+    service_cities = models.JSONField(default=list, blank=True, help_text="Список городов приема")
+
+
+    telegram_id = models.CharField(max_length=100, null=True, blank=True)  # Ник или ID в Telegram
+    phone_number = models.CharField(max_length=15, null=True, blank=True)  # Номер телефона
+
+    # О себе
     about_me_ru = models.TextField(null=True, blank=True)
 
-    # Каталоговое описание психолога (будет отображаться в каталоге)
+    # Каталоговое описание (для отображения в каталоге)
     catalog_description_ru = models.TextField(null=True, blank=True)
-
-    # Чем сможете помочь (текстовое поле)
-    help_text_ru = models.TextField(null=True, blank=True)
 
     # Квалификация (специализация)
     qualification = models.CharField(max_length=100, null=True, blank=True)  # Например "Психолог"
-    # С кем работаете? (Список)
+
+    # С кем работает (список)
     works_with_choices = [
         ('ADULTS', 'Взрослые'),
         ('TEENAGERS', 'Подростки'),
@@ -234,71 +249,71 @@ class PsychologistApplication(models.Model):
     ]
     works_with = models.CharField(max_length=50, choices=works_with_choices, null=True, blank=True)
 
-    # С какими проблемами работаете? (Список)
-    problems_worked_with = models.TextField(null=True, blank=True)  # Список проблем, например "Тревожность, депрессия"
+    # С какими проблемами работает
+    problems_worked_with = models.TextField(null=True, blank=True)
 
-    # Методы работы (список)
+    # Методы работы
     work_methods = models.TextField(null=True, blank=True)
 
-    # Дата начала практики
-    practice_start_date = models.DateField(null=True, blank=True)
+    # Стаж работы (в годах)
+    experience_years = models.PositiveIntegerField(null=True, blank=True, verbose_name="Стаж работы (в годах)")
+
     # Научная степень
     academic_degree = models.CharField(max_length=100, null=True, blank=True)
 
-    # Направления для психологов, детских психологов, коучей (списки)
-    psychologist_directions = models.TextField(null=True, blank=True)
-    child_psychologist_directions = models.TextField(null=True, blank=True)
-    coach_directions = models.TextField(null=True, blank=True)
-
     # Дополнительная специализация
     additional_specialization = models.TextField(null=True, blank=True)
-    # Особенности работы (онлайн/офлайн)
-    work_features = models.TextField(null=True, blank=True)
 
-    education = models.TextField(null=True, blank=True)
-    education_files = models.FileField(upload_to='education_documents/', null=True, blank=True)
+    # Дополнительные направления
+    additional_psychologist_directions = models.TextField(null=True, blank=True)
 
-    # Заявки и рейтинги
-    is_verified = models.BooleanField(default=False)  # Подтвержден ли психолог
-    is_in_catalog = models.BooleanField(default=False)  # В каталоге
+    # Образование (JSON: Год + Название)
+    education = models.JSONField(default=list, blank=True, null=True)
 
-    purchased_applications = models.IntegerField(default=0)  # Количество купленных заявок
-    expired_applications = models.IntegerField(default=0)  # Количество просроченных заявок
-    active_applications = models.IntegerField(default=0)  # Количество активных заявок
-    paid_applications = models.IntegerField(default=0)  # Количество оплаченных заявок
-    unpaid_applications = models.IntegerField(default=0)  # Количество неоплаченных заявок
+    # Документы об образовании
+    education_files = models.ManyToManyField('EducationDocument', blank=True, related_name='applications')
 
-    # Рейтинг системы
-    rating_system = models.FloatField(default=0.0)  # Внешний рейтинг, высчитываемый на платформе
-    internal_rating = models.FloatField(default=0.0)  # Внутренний рейтинг
+    # Адрес офиса
+    country = models.CharField(max_length=100, null=True, blank=True, verbose_name="Страна")
+    city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Город")
+    office_address = models.TextField(null=True, blank=True, verbose_name="Полный адрес офиса")
 
-    # Финансовая информация и стоимость услуг
-    session_duration = models.IntegerField(null=True, blank=True)  # Длительность сессии в минутах
-    session_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Стоимость в тенге
-    session_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True,
-                                           blank=True)  # Скидка на сессию в тенге
+    # Фото офиса
+    office_photo = models.ImageField(upload_to='office_photos/', null=True, blank=True)
 
-    online_session_duration = models.IntegerField(null=True, blank=True)  # Длительность онлайн сессии в минутах
-    online_session_price = models.DecimalField(max_digits=10, decimal_places=2, null=True,
-                                               blank=True)  # Стоимость онлайн сессии в тенге
-    online_session_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True,
-                                                  blank=True)  # Скидка на онлайн сессию в тенге
+    # **Приемы (сессии)**
+    SESSION_TYPES = [
+        ('INDIVIDUAL', 'Индивидуальная консультация'),
+        ('COUPLE', 'Парная консультация'),
+        ('GROUP', 'Групповая консультация'),
+    ]
 
-    couple_session_duration = models.IntegerField(null=True, blank=True)  # Длительность парной личной сессии
-    couple_session_price = models.DecimalField(max_digits=10, decimal_places=2, null=True,
-                                               blank=True)  # Стоимость парной личной сессии
-    couple_session_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True,
-                                                  blank=True)  # Скидка на парную личную сессию
+    ONLINE_OFFLINE_CHOICES = [
+        ('ONLINE', 'Онлайн'),
+        ('OFFLINE', 'Оффлайн'),
+    ]
 
-    couple_online_session_duration = models.IntegerField(null=True, blank=True)  # Длительность парной онлайн сессии
-    couple_online_session_price = models.DecimalField(max_digits=10, decimal_places=2, null=True,
-                                                      blank=True)  # Стоимость парной онлайн сессии
-    couple_online_session_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True,
-                                                         blank=True)  # Скидка на парную онлайн сессию
+    CURRENCY_CHOICES = [
+        ('KZT', 'Тенге'),
+        ('RUB', 'Рубли'),
+        ('USD', 'Доллары'),
+        ('EUR', 'Евро'),
+    ]
 
-    office_address = models.TextField(null=True, blank=True)  # Адрес офиса
-    office_photo = models.ImageField(upload_to='office_photos/', null=True, blank=True)  # Фото офиса
-    passport_document = models.FileField(upload_to='documents/', null=True, blank=True)  # Паспорт
+    service_sessions = models.JSONField(default=list, blank=True)
+
+    # **Рейтинги и заявки**
+    is_verified = models.BooleanField(default=False)
+    is_in_catalog = models.BooleanField(default=False)
+
+    purchased_applications = models.IntegerField(default=0)
+    expired_applications = models.IntegerField(default=0)
+    active_applications = models.IntegerField(default=0)
+    paid_applications = models.IntegerField(default=0)
+    unpaid_applications = models.IntegerField(default=0)
+
+    rating_system = models.FloatField(default=0.0)
+    internal_rating = models.FloatField(default=0.0)
 
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
@@ -309,14 +324,70 @@ class PsychologistApplication(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     documents_requested = models.BooleanField(default=False)
 
-    # валидации перед сохранением
-    def save(self, *args, **kwargs):
-        if self.status not in ['PENDING', 'APPROVED', 'REJECTED', 'DOCUMENTS_REQUESTED']:
-            raise ValueError("Invalid status value.")
-        super().save(*args, **kwargs)
+    # **Методы**
+    def add_service_session(self, session_type, online_offline, country, city, duration, price, currency):
+        """Добавляет новый прием (сессию)."""
+        session_data = {
+            "session_type": session_type,
+            "online_offline": online_offline,
+            "country": country,
+            "city": city,
+            "duration": duration,
+            "price": price,
+            "currency": currency
+        }
+        new_sessions = self.service_sessions[:]  # Создаем копию списка
+        new_sessions.append(session_data)
+        self.service_sessions = new_sessions
+        self.save(update_fields=['service_sessions'])
+
+    def remove_service_session(self, index):
+        """Удаляет прием (сессию) по индексу."""
+        if 0 <= index < len(self.service_sessions):
+            new_sessions = self.service_sessions[:]
+            del new_sessions[index]
+            self.service_sessions = new_sessions
+            self.save(update_fields=['service_sessions'])
+
+    def add_education_document(self, document, year, title):
+        """Добавляет документ об образовании."""
+        if not document:
+            raise ValueError("Документ не может быть пустым")
+
+        new_document = EducationDocument.objects.create(
+            psychologist_application=self,
+            document=document,
+            year=year,
+            title=title
+        )
+        self.education_files.add(new_document)
+        self.save(update_fields=['education_files'])
+
+    def remove_education_document(self, document_id):
+        """
+        Удаляет документ об образовании.
+        """
+        try:
+            doc = self.education_files.get(id=document_id)
+            doc.delete()
+        except EducationDocument.DoesNotExist:
+            pass
 
     def __str__(self):
-        return f"PsychologistApplication for {self.user.email}"
+        return f"Заявка психолога {self.user.email} (Стаж: {self.experience_years} лет)"
+
+# **FAQ психолога**
+class PsychologistFAQ(models.Model):
+    application = models.ForeignKey(
+        'PsychologistApplication',
+        related_name='faqs',
+        on_delete=models.CASCADE
+    )
+    question = models.CharField(max_length=255)
+    answer = models.TextField()
+
+    def __str__(self):
+        return f"FAQ: {self.question[:50]}..."
 
 #профиль психолога
 class PsychologistProfile(models.Model):
@@ -383,10 +454,8 @@ class PsychologistProfile(models.Model):
         """
         return Review.objects.filter(session__psychologist=self, session__status='COMPLETED').count()
 
-
 def get_default_cost():
     return settings.REQUEST_COST
-
 
 class PurchasedRequest(models.Model):
     psychologist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -399,7 +468,6 @@ class PurchasedRequest(models.Model):
 
     def __str__(self):
         return f"Purchase #{self.id} by {self.psychologist.email} on {self.created_at}"
-
 
 class Session(models.Model):
     psychologist = models.ForeignKey(
@@ -420,7 +488,6 @@ class Session(models.Model):
         ('CANCELED', 'Canceled'),
     ]
     status = models.CharField(max_length=10, choices=status_choices, default='SCHEDULED')
-
 
 # отзыв за проведенную сессию
 class Review(models.Model):
@@ -446,28 +513,13 @@ class Review(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Review by {self.client_name} for {self.psychologist_name} (Rating: {self.rating})"
-
+        return f"Review by {self.client_name or 'Unknown'} for {self.psychologist_name or 'Unknown'} (Rating: {self.rating})"
 
 class Specialization(models.Model):
     name = models.CharField(max_length=255)
 
     def __str__(self):
         return self.name
-
-
-#  faq вопрос/ы и ответ/ы психолога
-class PsychologistFAQ(models.Model):
-    application = models.ForeignKey(
-        'PsychologistApplication',
-        related_name='faqs',
-        on_delete=models.CASCADE
-    )
-    question = models.CharField(max_length=255)
-    answer = models.TextField()
-
-    def __str__(self):
-        return f"FAQ: {self.question[:50]}..."
 
 class BuyRequest(models.Model):
     psychologist = models.ForeignKey(PsychologistProfile, on_delete=models.CASCADE, related_name='buy_requests')

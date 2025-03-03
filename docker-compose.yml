@@ -20,8 +20,10 @@ services:
       - postgres_data:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: ailaq
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
+      POSTGRES_USER: aruka
+      POSTGRES_PASSWORD: aruka
+    ports:
+      - "5432:5432"
 
   nginx:
     image: nginx:alpine

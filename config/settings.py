@@ -17,7 +17,6 @@ DEBUG = env.bool("DEBUG", default=True)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=['*'])
 
-# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -91,10 +90,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': env('POSTGRES_DB', default='ailaq'),
-        'USER': env('POSTGRES_USER', default='admin'),
-        'PASSWORD': env('POSTGRES_PASSWORD', default='admin'),
-        'HOST': env('POSTGRES_HOST', default='db'),
-        # 'HOST': 'localhost',
+        'USER': env('POSTGRES_USER', default='aruka'),
+        'PASSWORD': env('POSTGRES_PASSWORD', default='aruka'),
+        'HOST': env('POSTGRES_HOST', default='localhost'),
         'PORT': env('POSTGRES_PORT', default='5432'),
     }
 }

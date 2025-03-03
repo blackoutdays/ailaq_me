@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
-    Review, BuyRequest, Topic, QuickConsultationRequest
+    Review, BuyRequest, Topic, QuickClientConsultationRequest
 from django.conf import settings
 from hashlib import sha256
 import hmac
@@ -21,14 +21,11 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
         fields = ['telegram_id', 'email', 'password', 'password_confirm', 'is_psychologist']
 
     def validate(self, data):
-        password = data.get('password')
-        password_confirm = data.get('password_confirm')
-
-        if password != password_confirm:
+        if data['password'] != data['password_confirm']:
             raise serializers.ValidationError({"password_confirm": "Пароли не совпадают."})
 
         try:
-            validate_password(password)
+            validate_password(data['password'])
         except ValidationError as e:
             raise serializers.ValidationError({"password": list(e.messages)})
 
@@ -37,13 +34,12 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
+
         user = CustomUser(**validated_data)
         user.set_password(password)
-
-        # Генерация verification_code
-        user.verification_code = CustomUser.objects.generate_unique_verification_code()
-
+        user.verification_code = CustomUser._default_manager.generate_unique_verification_code()
         user.save()
+
         return user
 
 class LoginSerializer(serializers.Serializer):
@@ -51,15 +47,8 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        """
-        Проверка наличия email и пароля.
-        """
-        email = data.get("email")
-        password = data.get("password")
-
-        if not email or not password:
-            raise serializers.ValidationError("Email and password are required.")
-
+        if not data.get("email") or not data.get("password"):
+            raise serializers.ValidationError("Email и пароль обязательны.")
         return data
 
 class PsychologistProfileSerializer(serializers.ModelSerializer):
@@ -67,35 +56,19 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
     reviews = serializers.SerializerMethodField()
     catalog_description_ru = serializers.CharField(source='application.catalog_description_ru', read_only=True)
     session_price = serializers.DecimalField(source='application.session_price', max_digits=10, decimal_places=2, read_only=True)
-    session_discount = serializers.DecimalField(source='application.session_discount', max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = PsychologistProfile
         fields = [
-            'id',
-            'user',
-            'catalog_description_ru',
-            'session_price',
-            'session_discount',
-            'is_in_catalog',
-            'is_verified',
-            'requests_count',
-            'average_rating',
-            'reviews',
+            'id', 'user', 'catalog_description_ru', 'session_price',
+            'is_in_catalog', 'is_verified', 'requests_count', 'average_rating', 'reviews',
         ]
 
     def get_average_rating(self, obj):
-        """
-        Рассчитывает средний рейтинг психолога.
-        """
         return obj.get_average_rating()
 
     def get_reviews(self, obj):
-        """
-        Возвращает список отзывов психолога.
-        """
-        reviews_qs = obj.sessions.filter(status='COMPLETED').values_list('review', flat=True)
-        reviews = Review.objects.filter(id__in=reviews_qs)
+        reviews = Review.objects.filter(session__psychologist=obj)
         return [
             {
                 "id": review.id,
@@ -107,21 +80,18 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
         ]
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
+    user = serializers.ReadOnlyField(source="user.email")
+    session_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+
     class Meta:
         model = PsychologistApplication
-        exclude = ['user']  # Поле user исключается из входящих данных
+        exclude = ['user']
 
     def create(self, validated_data):
-        """
-        Создаёт заявку психолога, добавляя пользователя из контекста.
-        """
-        user = self.context['request'].user  # Получаем текущего пользователя из контекста
+        user = self.context['request'].user
         return PsychologistApplication.objects.create(user=user, **validated_data)
 
     def update(self, instance, validated_data):
-        """
-        Обновляет существующую заявку психолога.
-        """
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -132,7 +102,6 @@ class ClientProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientProfile
         fields = '__all__'
-
 
 class PsychologistLevelSerializer(serializers.ModelSerializer):
     class Meta:
@@ -184,39 +153,37 @@ class CatalogSerializer(serializers.ModelSerializer):
             'reviews_count',
         ]
 
-    def get_first_name_ru(self, obj):
+    def get_first_name_ru(self, obj) -> str | None:
         return getattr(obj.application, 'first_name_ru', None)
 
-    def get_last_name_ru(self, obj):
+    def get_last_name_ru(self, obj) -> str | None:
         return getattr(obj.application, 'last_name_ru', None)
 
-    def get_middle_name_ru(self, obj):
+    def get_middle_name_ru(self, obj) -> str | None:
         return getattr(obj.application, 'middle_name_ru', None)
 
-    def get_qualification(self, obj):
+    def get_qualification(self, obj) -> str | None:
         return getattr(obj.application, 'qualification', None)
 
-    def get_academic_degree(self, obj):
+    def get_academic_degree(self, obj) -> str | None:
         return getattr(obj.application, 'academic_degree', None)
 
-    def get_catalog_description_ru(self, obj):
+    def get_catalog_description_ru(self, obj) -> str | None:
         return getattr(obj.application, 'catalog_description_ru', None)
 
-    def get_session_price(self, obj):
+    def get_session_price(self, obj) -> float | None:
         return getattr(obj.application, 'session_price', None)
 
-    def get_average_rating(self, obj):
+    def get_average_rating(self, obj) -> float | None:
         return obj.get_average_rating()
 
-    def get_reviews_count(self, obj):
+    def get_reviews_count(self, obj) -> int | None:
         return obj.get_reviews_count()
-
 
 class BuyRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = BuyRequest
         fields = '__all__'
-
 
 #для вьющек сериализаторы по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
@@ -252,12 +219,10 @@ class ServicePriceSerializer(serializers.ModelSerializer):
             'office_address', 'office_photo'
         ]
 
-
 # 1. faq вопрос/ы и ответ/ы
 class FAQSerializer(serializers.Serializer):
     question = serializers.CharField(max_length=255)
     answer = serializers.CharField(max_length=1000)
-
 
 # 2. faq вопрос/ы и ответ/ы
 class FAQListSerializer(serializers.Serializer):
@@ -271,8 +236,6 @@ class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistApplication
         fields = ['passport_document', 'education_files']
-
-
 
 class TelegramAuthSerializer(serializers.Serializer):
     id = serializers.IntegerField()
@@ -291,13 +254,11 @@ class TelegramAuthSerializer(serializers.Serializer):
         secret_key = sha256(token.encode()).digest()
         expected_hash = hmac.new(secret_key, check_string.encode(), sha256).hexdigest()
 
-        # Проверка подлинности данных
         if data['hash'] != expected_hash:
-            raise serializers.ValidationError("Invalid Telegram authentication data")
+            raise serializers.ValidationError("Неверные данные Telegram.")
 
-        # Проверка времени авторизации (24 часа)
         if time.time() - int(data['auth_date']) > 86400:
-            raise serializers.ValidationError("Telegram authentication expired")
+            raise serializers.ValidationError("Время авторизации истекло.")
 
         return data
 
@@ -309,25 +270,24 @@ class TelegramAuthSerializer(serializers.Serializer):
         username = validated_data.get('username', f"user_{telegram_id}")
         first_name = validated_data.get('first_name', "")
 
-        # Создаем пользователя или обновляем его данные
         user, created = CustomUser.objects.get_or_create(
             telegram_id=telegram_id,
             defaults={'email': f"{telegram_id}@telegram.local", 'username': username}
         )
+
         if not created:
             user.username = username
+            user.first_name = first_name
             user.save()
 
         return user
-
 
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Topic
         fields = '__all__'
 
-
-class QuickConsultationRequestSerializer(serializers.ModelSerializer):
+class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
     additional_topics = TopicSerializer(many=True, required=False, help_text="Список дополнительных тем")
     client_name = serializers.CharField(help_text="Имя клиента, как к вам обращаться")
     birth_date = serializers.DateField(help_text="Дата рождения клиента")
@@ -342,7 +302,7 @@ class QuickConsultationRequestSerializer(serializers.ModelSerializer):
     verification_code = serializers.CharField(read_only=True, help_text="Код для привязки Telegram")
 
     class Meta:
-        model = QuickConsultationRequest
+        model = QuickClientConsultationRequest
         fields = [
             'client_name', 'birth_date', 'gender', 'psychologist_language',
             'preferred_psychologist_age', 'psychologist_gender', 'topic',
@@ -352,8 +312,20 @@ class QuickConsultationRequestSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         topics_data = validated_data.pop('additional_topics', [])
         verification_code = str(random.randint(1000, 9999))
-        consultation_request = QuickConsultationRequest.objects.create(
+
+        consultation_request = QuickClientConsultationRequest.objects.create(
             verification_code=verification_code, **validated_data
         )
-        consultation_request.additional_topics.set(topics_data)
+
+        # Обработка списка: извлекаем ID, если переданы объекты
+        topic_ids = []
+        for topic in topics_data:
+            if isinstance(topic, dict):  # Если передан объект, извлекаем ID
+                topic_id = topic.get("id")
+                if topic_id:
+                    topic_ids.append(topic_id)
+            else:  # Если передан ID, используем его напрямую
+                topic_ids.append(topic)
+
+        consultation_request.additional_topics.set(topic_ids)
         return consultation_request

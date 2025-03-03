@@ -6,7 +6,7 @@ from ailaq.views import LoginView, RegisterUserView, SubmitPsychologistApplicati
     UpdatePsychologistProfileView, CatalogView, BuyRequestsView, PsychologistProfileViewSet, PsychologistProfileView, \
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewListCreateView, \
     ReviewDetailView, TelegramAuthView, LinkTelegramView, VerificationCodeView, NewVerificationCodeView, \
-    QuickConsultationAPIView
+    QuickClientConsultationAPIView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -41,7 +41,7 @@ urlpatterns = [
     path('link-telegram/', LinkTelegramView.as_view(), name='link_telegram'),
     path('verification-code/', VerificationCodeView.as_view(), name='verification_code'),
     path('new-verification-code/', NewVerificationCodeView.as_view(), name='new_verification_code'),
-    path('api/quick-consultation/', QuickConsultationAPIView.as_view(), name='quick_consultation_api'),
+    path('api/quick-consultation/', QuickClientConsultationAPIView.as_view(), name='quick_consultation_api'),
 ]
 
 if settings.DEBUG:

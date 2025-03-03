@@ -5,6 +5,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 import django
 django.setup()
 
+import aiohttp
 from django.contrib.auth import get_user_model
 from config import settings
 
@@ -17,7 +18,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-import requests
 from asgiref.sync import sync_to_async
 from ailaq.models import Session, Review, PsychologistProfile, ClientProfile
 
@@ -27,7 +27,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-BACKEND_URL = "http://localhost:8000/link-telegram/"
+BACKEND_URL = "http://127.0.0.1:8000/link-telegram/"
 
 User = get_user_model()
 
@@ -46,33 +46,30 @@ async def handle_verification_code(update: Update, context: ContextTypes.DEFAULT
     user_input = update.message.text.split(' ')
 
     if len(user_input) != 2:
-        await update.message.reply_text("Пожалуйста, введите код в формате: /code <ваш_код>")
+        await update.message.reply_text("Введите код в формате: /code 1234")
         return
 
     verification_code = user_input[1]
     telegram_id = update.effective_chat.id
 
-    try:
-        # Отправляем запрос на привязку Telegram ID
-        response = requests.post(
-            f"{BACKEND_URL}",
-            json={
-                "verification_code": verification_code,
-                "telegram_id": telegram_id
-            }
-        )
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                BACKEND_URL,
+                json={"verification_code": verification_code, "telegram_id": telegram_id}
+            ) as response:
+                print(response.status, await response.text())  # Добавь это
+                response_data = await response.json()
 
-        # Обрабатываем ответ
-        if response.status_code == 200:
-            await update.message.reply_text("Ваш Telegram ID успешно привязан!")
-        else:
-            error_message = response.json().get('error', 'Неправильный код')
-            await update.message.reply_text(f"Ошибка: {error_message}")
+                if response.status == 200:
+                    await update.message.reply_text("Ваш Telegram ID успешно привязан!")
+                else:
+                    error_message = response_data.get('error', 'Неправильный код')
+                    await update.message.reply_text(f"Ошибка: {error_message}")
 
-    except Exception as e:
-        logging.exception(e)
-        await update.message.reply_text("Произошла ошибка при привязке Telegram ID. Попробуйте ещё раз.")
-
+        except Exception as e:
+            logging.exception(e)
+            await update.message.reply_text("Ошибка при привязке Telegram ID. Попробуйте ещё раз.")
 
 async def get_psychologist_profile(telegram_id):
     return await sync_to_async(PsychologistProfile.objects.get)(telegram_id=telegram_id)
