@@ -2,7 +2,10 @@
 import hmac
 from asgiref.sync import async_to_sync
 from django.utils.timezone import now
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 import time
+from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
 from hashlib import sha256
 from rest_framework import status, viewsets
@@ -22,9 +25,13 @@ from .serializers import (
     PsychologistProfileSerializer,
     PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
     BuyRequestSerializer, PersonalInfoSerializer, QualificationSerializer, DocumentSerializer,
-    FAQSerializer, FAQListSerializer, TopicSerializer, QuickClientConsultationRequestSerializer, TelegramAuthSerializer
+    FAQSerializer, FAQListSerializer, TopicSerializer, QuickClientConsultationRequestSerializer, TelegramAuthSerializer,
+    ServicePriceSerializer
 )
-from .permissions import IsVerifiedPsychologist
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter
+from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.pagination import PageNumberPagination
 from .pagination import StandardResultsSetPagination
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -34,72 +41,146 @@ logger = logging.getLogger(__name__)
 
 bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
-# Регистрация пользователя
-@method_decorator(csrf_exempt, name='dispatch')
+# # Регистрация пользователя
+# @method_decorator(csrf_exempt, name='dispatch')
+# class RegisterUserView(APIView):
+#     @extend_schema(
+#         operation_id="register_user",
+#         description="Регистрация нового пользователя.",
+#         request=CustomUserCreationSerializer,
+#         responses={
+#             201: OpenApiResponse(description="User registered successfully."),
+#             400: OpenApiResponse(description="Invalid data."),
+#         },
+#     )
+#     def post(self, request):
+#         try:
+#             serializer = CustomUserCreationSerializer(data=request.data)
+#             if serializer.is_valid():
+#                 user = serializer.save()
+#                 if user.wants_to_be_psychologist:
+#                     PsychologistApplication.objects.get_or_create(user=user)
+#
+#                 # Генерация токенов
+#                 refresh = RefreshToken.for_user(user)
+#                 return Response(
+#                     {
+#                         "access_token": str(refresh.access_token),
+#                         "refresh_token": str(refresh),
+#                         "verification_code": user.verification_code  # Отправляем код пользователю
+#                     },
+#                     status=status.HTTP_201_CREATED,
+#                 )
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#
+#         except Exception as e:
+#             logger.error(f"Error during user registration: {str(e)}")
+#             return Response({"error": "Internal server error. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#
+#
+# class LoginView(APIView):
+#     @extend_schema(
+#         operation_id="login_user",
+#         description="Авторизация пользователя.",
+#         request=LoginSerializer,
+#         responses={
+#             200: OpenApiResponse(description="Login successful."),
+#             400: OpenApiResponse(description="Invalid credentials."),
+#         },
+#     )
+#     def post(self, request):
+#         serializer = LoginSerializer(data=request.data)
+#         if serializer.is_valid():
+#             email = serializer.validated_data["email"]
+#             password = serializer.validated_data["password"]
+#
+#             # Проверка пользователя
+#             user = CustomUser.objects.filter(email=email).first()
+#             if user and user.check_password(password):
+#                 refresh = RefreshToken.for_user(user)
+#                 return Response(
+#                     {
+#                         "access_token": str(refresh.access_token),
+#                         "refresh_token": str(refresh),
+#                     },
+#                     status=status.HTTP_200_OK,
+#                 )
+#         return Response({"error": "Invalid credentials."}, status=status.HTTP_400_BAD_REQUEST)
+# 🔹 **Регистрация пользователя с русскими ошибками**
 class RegisterUserView(APIView):
+    permission_classes = [AllowAny]
+
     @extend_schema(
-        operation_id="register_user",
-        description="Регистрация нового пользователя.",
         request=CustomUserCreationSerializer,
-        responses={
-            201: OpenApiResponse(description="User registered successfully."),
-            400: OpenApiResponse(description="Invalid data."),
-        },
+        responses={201: OpenApiResponse(description="Пользователь успешно зарегистрирован.")},
     )
     def post(self, request):
-        try:
-            serializer = CustomUserCreationSerializer(data=request.data)
-            if serializer.is_valid():
-                user = serializer.save()
-                if user.wants_to_be_psychologist:
-                    PsychologistApplication.objects.get_or_create(user=user)
+        serializer = CustomUserCreationSerializer(data=request.data)
 
-                # Генерация токенов
-                refresh = RefreshToken.for_user(user)
-                return Response(
-                    {
-                        "access_token": str(refresh.access_token),
-                        "refresh_token": str(refresh),
-                        "verification_code": user.verification_code  # Отправляем код пользователю
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if serializer.is_valid():
+            password = serializer.validated_data["password"]
+            password_confirm = serializer.validated_data["password_confirm"]
 
-        except Exception as e:
-            logger.error(f"Error during user registration: {str(e)}")
-            return Response({"error": "Internal server error. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Проверяем совпадение паролей
+            if password != password_confirm:
+                return Response({"password_confirm": "Пароли не совпадают."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Проверяем сложность пароля
+            try:
+                validate_password(password)
+            except ValidationError as e:
+                return Response({"password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = serializer.save()
+            if user.wants_to_be_psychолог:
+                PsychologistApplication.objects.get_or_create(user=user)
+
+            refresh = RefreshToken.for_user(user)
+            return Response(
+                {
+                    "access_token": str(refresh.access_token),
+                    "refresh_token": str(refresh),
+                    "role": "психолог" if user.is_psychologist else "клиент"
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# 🔹 **Авторизация с русскими ошибками**
 class LoginView(APIView):
+    permission_classes = [AllowAny]
+
     @extend_schema(
-        operation_id="login_user",
-        description="Авторизация пользователя.",
         request=LoginSerializer,
-        responses={
-            200: OpenApiResponse(description="Login successful."),
-            400: OpenApiResponse(description="Invalid credentials."),
-        },
+        responses={200: OpenApiResponse(description="Успешный вход в систему.")},
     )
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
+
         if serializer.is_valid():
             email = serializer.validated_data["email"]
             password = serializer.validated_data["password"]
-
-            # Проверка пользователя
             user = CustomUser.objects.filter(email=email).first()
-            if user and user.check_password(password):
-                refresh = RefreshToken.for_user(user)
-                return Response(
-                    {
-                        "access_token": str(refresh.access_token),
-                        "refresh_token": str(refresh),
-                    },
-                    status=status.HTTP_200_OK,
-                )
-        return Response({"error": "Invalid credentials."}, status=status.HTTP_400_BAD_REQUEST)
 
+            if not user:
+                return Response({"error": "Пользователь с таким email не найден."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if not user.check_password(password):
+                return Response({"error": "Неверный пароль."}, status=status.HTTP_400_BAD_REQUEST)
+
+            refresh = RefreshToken.for_user(user)
+            return Response(
+                {
+                    "access_token": str(refresh.access_token),
+                    "refresh_token": str(refresh),
+                    "role": "психолог" if user.is_psychologist else "клиент"
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class QuickClientConsultationAPIView(APIView):
 
@@ -144,109 +225,45 @@ class QuickClientConsultationAPIView(APIView):
             text=f"Ваша заявка принята. ID заявки: {consultation_id}"
         )
 
-class SubmitPsychologistApplicationView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=PsychologistApplicationSerializer,
-        responses={
-            201: OpenApiResponse(description="Application submitted successfully."),
-            400: OpenApiResponse(description="Invalid data."),
-        },
-    )
-    def post(self, request):
-        # Проверка, хочет ли пользователь быть психологом
-        if not request.user.wants_to_be_psychologist:
-            return Response(
-                {"error": "You are not eligible to submit an application."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Передаём данные для сериализатора
-        serializer = PsychologistApplicationSerializer(
-            data=request.data, context={"request": request}
-        )
-        if serializer.is_valid():
-            # Сохраняем заявку
-            serializer.save()
-            return Response(
-                {"message": "Application submitted successfully."},
-                status=status.HTTP_201_CREATED,
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class UpdatePsychologistProfileView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=PsychologistProfileSerializer,
-        responses={
-            200: OpenApiResponse(description="Профиль обновлен успешно."),
-            201: OpenApiResponse(description="Профиль создан и обновлен успешно."),
-        },
-    )
-    def put(self, request):
-        profile, created = PsychologistProfile.objects.get_or_create(user=request.user)
-
-        serializer = PsychologistProfileSerializer(profile, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-            return Response(serializer.data, status=status_code)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 # Список психологов с фильтрацией каталог
-class CatalogView(APIView):
+class CatalogPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class CatalogViewSet(ReadOnlyModelViewSet):
+    """Каталог психологов с фильтрацией, сортировкой и пагинацией """
+    queryset = PsychologistProfile.objects.filter(is_in_catalog=True).select_related('application')
+    serializer_class = CatalogSerializer
+    pagination_class = CatalogPagination
     permission_classes = [AllowAny]
 
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = {
+        'is_verified': ['exact'],
+        'is_in_catalog': ['exact'],
+        'requests_count': ['gte', 'lte'],
+        'application__session_price': ['gte', 'lte']
+    }
+    ordering_fields = ['application__id', 'requests_count', 'application__session_price']
+    ordering = ['application__id']
+
     @extend_schema(
-        description="Получить список психологов с фильтрацией и сортировкой.",
+        description="Получить список психологов с фильтрацией, сортировкой и пагинацией.",
         parameters=[
-            OpenApiParameter("is_verified", description="Фильтр по верификации", required=False, type=bool),
-            OpenApiParameter("is_in_catalog", description="Фильтр по наличию в каталоге", required=False, type=bool),
-            OpenApiParameter("min_requests", description="Минимальное количество запросов", required=False, type=int),
-            OpenApiParameter("max_price", description="Максимальная цена за сессию", required=False, type=float),
-            OpenApiParameter("sort_by", description="Сортировка по полю", required=False, type=str, default="application__id"),
+            OpenApiParameter("is_verified", description="Фильтр по верификации (true/false)", required=False, type=bool),
+            OpenApiParameter("is_in_catalog", description="Фильтр по наличию в каталоге (true/false)", required=False, type=bool),
+            OpenApiParameter("requests_count__gte", description="Минимальное количество запросов", required=False, type=int),
+            OpenApiParameter("requests_count__lte", description="Максимальное количество запросов", required=False, type=int),
+            OpenApiParameter("application__session_price__gte", description="Минимальная цена за сессию", required=False, type=float),
+            OpenApiParameter("application__session_price__lte", description="Максимальная цена за сессию", required=False, type=float),
+            OpenApiParameter("ordering", description="Сортировка (application__id, requests_count, application__session_price)", required=False, type=str),
+            OpenApiParameter("page", description="Номер страницы", required=False, type=int),
+            OpenApiParameter("page_size", description="Количество элементов на странице (по умолчанию 10)", required=False, type=int),
         ],
     )
-    def get(self, request):
-        try:
-            queryset = PsychologistProfile.objects.filter(is_in_catalog=True).select_related('application')
-
-            if request.query_params.get('is_verified') is not None:
-                queryset = queryset.filter(is_verified=request.query_params.get('is_verified').lower() == 'true')
-
-            if request.query_params.get('is_in_catalog') is not None:
-                queryset = queryset.filter(is_in_catalog=request.query_params.get('is_in_catalog').lower() == 'true')
-
-            if request.query_params.get('min_requests'):
-                try:
-                    min_requests = int(request.query_params.get('min_requests'))
-                    queryset = queryset.filter(requests_count__gte=min_requests)
-                except ValueError:
-                    return Response({"error": "Некорректное значение для min_requests."}, status=400)
-
-            if request.query_params.get('max_price'):
-                try:
-                    max_price = float(request.query_params.get('max_price'))
-                    queryset = queryset.filter(application__session_price__lte=max_price)
-                except ValueError:
-                    return Response({"error": "Некорректное значение для max_price."}, status=400)
-
-            sort_by = request.query_params.get('sort_by', 'application__id')
-            queryset = queryset.order_by(sort_by)
-
-            # Пагинация
-            pagination = StandardResultsSetPagination()
-            result_page = pagination.paginate_queryset(queryset, request)
-            serializer = CatalogSerializer(result_page, many=True)
-            return pagination.get_paginated_response(serializer.data)
-
-        except Exception as e:
-            logger.error(f"Ошибка в CatalogView: {e}")
-            return Response({"error": "Ошибка сервера."}, status=500)
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
 class ClientProfileViewSet(viewsets.ModelViewSet):
     queryset = ClientProfile.objects.all()
@@ -256,314 +273,273 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
 
+# 🔹 Получение полного профиля психолога
 class PsychologistProfileView(APIView):
+    """
+    Получает весь профиль психолога, включая отзывы.
+    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        responses={200: PsychologistProfileSerializer}
-    )
-    def get(self, request, psychologist_id):
-        try:
-            profile = PsychologistProfile.objects.get(pk=psychologist_id)
-            serializer = PsychologistProfileSerializer(profile)
-            return Response(serializer.data, status=200)
-        except PsychologistProfile.DoesNotExist:
-            return Response({"error": "Profile not found"}, status=404)
-
-class PsychologistProfileViewSet(viewsets.ModelViewSet):
-    queryset = PsychologistProfile.objects.all()
-    serializer_class = PsychologistProfileSerializer
-    pagination_class = StandardResultsSetPagination
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        description="Получить список профилей психологов.",
-        responses={200: PsychologistProfileSerializer(many=True)},
-    )
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
-    @extend_schema(
-        description="Обновить профиль психолога.",
-        request=PsychologistProfileSerializer,
-        responses={200: PsychologistProfileSerializer},
-    )
-    def update(self, request, *args, **kwargs):
-        return super().update(request, *args, **kwargs)
-
-
-class PsychologistApplicationView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        responses={200: PsychologistApplicationSerializer(many=True)},
-        description="Получить список всех заявок."
+        summary="Получить полный профиль психолога",
+        description="Возвращает данные психолога, включая личную информацию, квалификацию, услуги, FAQ и отзывы.",
+        responses={200: {
+            "personal_info": PersonalInfoSerializer,
+            "qualification": QualificationSerializer,
+            "service_price": ServicePriceSerializer,
+            "faq": FAQListSerializer,
+            "reviews": ReviewSerializer(many=True),
+        }}
     )
     def get(self, request):
-        applications = PsychologistApplication.objects.all()
-        serializer = PsychologistApplicationSerializer(applications, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
 
-    @extend_schema(
-        request=PsychologistApplicationSerializer,
-        responses={
-            201: OpenApiResponse(description="Заявка создана успешно."),
-            400: OpenApiResponse(description="Ошибка создания заявки."),
-        },
-    )
-    def post(self, request):
-        serializer = PsychologistApplicationSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            reviews = Review.objects.filter(psychologist=application.profile).order_by("-created_at")
+            reviews_serializer = ReviewSerializer(reviews, many=True)
 
-# эндпоинты для профиля/заявки психолога
+            data = {
+                "personal_info": PersonalInfoSerializer(application).data,
+                "qualification": QualificationSerializer(application).data,
+                "service_price": ServicePriceSerializer(application).data,
+                "faq": FAQListSerializer({
+                    "faqs": [{"question": faq.question, "answer": faq.answer} for faq in application.faqs.all()]
+                }).data,
+                "reviews": reviews_serializer.data,
+            }
+
+            return Response(data, status=status.HTTP_200_OK)
+
+        except PsychologistApplication.DoesNotExist:
+            return Response({"error": "Профиль психолога не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+# 🔹 Обновление личной информации
 class PersonalInfoView(APIView):
+    """
+    Обновление личной информации психолога.
+    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        operation_id="update_personal_info",
-        description="Обновить личную информацию психолога.",
         request=PersonalInfoSerializer,
-        responses={
-            200: OpenApiResponse(description="Личная информация обновлена успешно."),
-            400: OpenApiResponse(description="Ошибка валидации."),
-        },
+        responses={200: PersonalInfoSerializer}
     )
-    def post(self, request):
-        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
-        serializer = PersonalInfoSerializer(app, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Личная информация обновлена успешно."}, status=200)
-        return Response(serializer.errors, status=400)
+    def patch(self, request):
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
+            serializer = PersonalInfoSerializer(application, data=request.data, partial=True)
 
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except PsychologistApplication.DoesNotExist:
+            return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+
+# 🔹 Обновление квалификации
 class QualificationView(APIView):
+    """
+    Обновление квалификации психолога.
+    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        operation_id="update_qualification",
-        description="Обновить информацию о квалификации психолога.",
         request=QualificationSerializer,
-        responses={
-            200: OpenApiResponse(description="Квалификация обновлена успешно."),
-            400: OpenApiResponse(description="Ошибка валидации."),
-        },
+        responses={200: QualificationSerializer}
     )
-    def post(self, request):
-        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
-        serializer = QualificationSerializer(app, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Квалификация обновлена успешно."}, status=200)
-        return Response(serializer.errors, status=400)
+    def patch(self, request):
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
+            serializer = QualificationSerializer(application, data=request.data, partial=True)
+
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except PsychologistApplication.DoesNotExist:
+            return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
 
 
-class FAQView(APIView):
+# 🔹 Обновление стоимости услуг
+class ServicePriceView(APIView):
+    """
+    Обновление стоимости услуг психолога.
+    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        operation_id="get_or_update_faq",
-        description="Получить список FAQ, один FAQ или пусто, в зависимости от переданных данных.",
-        request=FAQListSerializer,
-        responses={
-            200: FAQListSerializer,
-            400: OpenApiResponse(description="Некорректные данные."),
-        },
+        request=ServicePriceSerializer,
+        responses={200: ServicePriceSerializer}
     )
-    def post(self, request):
-        """
-        Обработка POST-запроса: сохранение списка FAQ или одного FAQ.
-        """
-        data = request.data.get("faqs", [])
-        if isinstance(data, list):  # Если список FAQ
-            serializer = FAQListSerializer(data={"faqs": data})
-        else:  # Если это один FAQ
-            serializer = FAQSerializer(data=request.data)
+    def patch(self, request):
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
+            serializer = ServicePriceSerializer(application, data=request.data, partial=True)
 
-        if serializer.is_valid():
-            faqs_data = serializer.validated_data.get("faqs", [])
-            if faqs_data:  # Обработка списка
-                # Сохраняем список FAQ
-                for faq in faqs_data:
-                    PsychologistFAQ.objects.create(
-                        application=PsychologistApplication.objects.get(user=request.user),
-                        question=faq["question"],
-                        answer=faq["answer"],
-                    )
-                return Response({"message": "Список FAQ добавлен успешно."}, status=200)
-            elif "question" in serializer.validated_data:  # Обработка одного FAQ
-                faq = serializer.validated_data
-                PsychologistFAQ.objects.create(
-                    application=PsychologistApplication.objects.get(user=request.user),
-                    question=faq["question"],
-                    answer=faq["answer"],
-                )
-                return Response({"message": "FAQ добавлен успешно."}, status=200)
-            else:  # Если ничего
-                return Response({"message": "Нет данных для сохранения."}, status=204)
-        return Response(serializer.errors, status=400)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except PsychologistApplication.DoesNotExist:
+            return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+
+# 🔹 Обновление FAQ психолога
+class FAQView(APIView):
+    """
+    Получение и обновление FAQ психолога.
+    """
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
         operation_id="get_faqs",
         description="Получить список FAQ текущего пользователя.",
-        responses={
-            200: FAQListSerializer,
-            404: OpenApiResponse(description="FAQ не найдены."),
-        },
+        responses={200: FAQListSerializer, 404: {"description": "FAQ не найдены."}},
     )
     def get(self, request):
         """
-        Получить список FAQ для текущего пользователя.
+        Получает список FAQ для текущего пользователя.
         """
-        application = PsychologistApplication.objects.filter(user=request.user).first()
-        if not application:
-            return Response({"error": "Заявка не найдена."}, status=404)
+        application = get_object_or_404(PsychologistApplication, user=request.user)
 
         faqs = application.faqs.all()
-        if not faqs.exists():
-            return Response({"faqs": []}, status=200)
-
         serializer = FAQListSerializer({"faqs": [{"question": faq.question, "answer": faq.answer} for faq in faqs]})
-        return Response(serializer.data, status=200)
 
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        operation_id="update_faq",
+        description="Обновить список FAQ (заменяет все старые вопросы).",
+        request=FAQListSerializer,
+        responses={200: {"description": "FAQ обновлены успешно."}, 400: {"description": "Ошибка валидации."}},
+    )
+    def patch(self, request):
+        """
+        Обновляет список FAQ: сначала удаляет старые, затем добавляет новые.
+        """
+        application = get_object_or_404(PsychologistApplication, user=request.user)
+
+        serializer = FAQListSerializer(data=request.data)
+        if serializer.is_valid():
+            # Удаляем старые FAQ
+            application.faqs.all().delete()
+
+            # Добавляем новые вопросы
+            faqs_data = serializer.validated_data.get("faqs", [])
+            new_faqs = [PsychologistFAQ(application=application, **faq) for faq in faqs_data]
+
+            PsychologistFAQ.objects.bulk_create(new_faqs)
+
+            return Response({"message": "FAQ обновлены успешно."}, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# 🔹 Загрузка документов
 class DocumentView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        operation_id="update_documents",
-        description="Добавить или обновить документы психолога.",
         request=DocumentSerializer,
-        responses={
-            200: OpenApiResponse(description="Документы обновлены успешно."),
-            400: OpenApiResponse(description="Ошибка валидации."),
-        },
+        responses={200: DocumentSerializer}
     )
-    def post(self, request):
-        app, created = PsychologistApplication.objects.get_or_create(user=request.user)
+    def patch(self, request):
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
 
-        if not request.FILES:
-            return Response({"error": "Не загружены файлы."}, status=400)
+            if not request.FILES:
+                return Response({"error": "Не загружены файлы."}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = DocumentSerializer(app, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Документы обновлены успешно."}, status=200)
+            serializer = DocumentSerializer(application, data=request.data, partial=True)
 
-        return Response(serializer.errors, status=400)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"message": "Документы обновлены успешно."}, status=status.HTTP_200_OK)
 
-#Список отзывов (GET) и создание нового отзыва (POST)
-class ReviewListCreateView(ListCreateAPIView):
-    queryset = Review.objects.all()
-    serializer_class = ReviewSerializer
-    permission_classes = [IsAuthenticated]
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except PsychologistApplication.DoesNotExist:
+            return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+class ReviewListView(APIView):
+    """
+    Получение списка отзывов о психологе.
+    """
+    permission_classes = [AllowAny]
 
     @extend_schema(
-        summary="Получить список отзывов",
-        description="Возвращает список всех отзывов с данными о клиенте, психологе, сессии, рейтинге и тексте отзыва.",
-        responses={200: ReviewSerializer(many=True)},
+        summary="Получить список отзывов о психологе",
+        description="Возвращает все отзывы, оставленные клиентами для конкретного психолога.",
+        parameters=[
+            OpenApiParameter(name="psychologist_id", description="ID психолога", required=True, type=int),
+            OpenApiParameter(name="page", description="Номер страницы (пагинация)", required=False, type=int),
+            OpenApiParameter(name="page_size", description="Количество отзывов на странице", required=False, type=int),
+        ],
+        responses={200: ReviewSerializer(many=True)}
     )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+    def get(self, request):
+        psychologist_id = request.query_params.get("psychologist_id")
+
+        if not psychologist_id:
+            return Response({"error": "Не указан ID психолога."}, status=status.HTTP_400_BAD_REQUEST)
+
+        psychologist = get_object_or_404(PsychologistProfile, id=psychologist_id)
+        reviews = Review.objects.filter(psychologist=psychologist).order_by("-created_at")
+
+        # Пагинация
+        paginator = PageNumberPagination()
+        paginated_reviews = paginator.paginate_queryset(reviews, request)
+        serializer = ReviewSerializer(paginated_reviews, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
+
+class ReviewCreateView(APIView):
+    """
+    Оставить отзыв о психологе. Клиент может оставить отзыв только после завершённой сессии.
+    """
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
         summary="Создать отзыв",
-        description="Создаёт новый отзыв. Требуется указать ID сессии, рейтинг и текст отзыва.",
+        description="Клиент может оставить отзыв о психологе только после завершённой сессии.",
         request=ReviewSerializer,
-        responses={201: ReviewSerializer},
+        responses={201: ReviewSerializer, 400: OpenApiResponse(description="Ошибка валидации")},
     )
-    def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
-
-#Подробный отзыв (GET, PUT, DELETE)
-class ReviewDetailView(RetrieveUpdateDestroyAPIView):
-    queryset = Review.objects.all()
-    serializer_class = ReviewSerializer
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        summary="Получить отзыв",
-        description="Возвращает данные конкретного отзыва по его ID.",
-        responses={200: ReviewSerializer},
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-    @extend_schema(
-        summary="Обновить отзыв",
-        description="Обновляет существующий отзыв. Требуются права доступа и ID отзыва.",
-        request=ReviewSerializer,
-        responses={200: ReviewSerializer},
-    )
-    def put(self, request, *args, **kwargs):
-        return super().put(request, *args, **kwargs)
-
-    @extend_schema(
-        summary="Удалить отзыв",
-        description="Удаляет отзыв по ID. Требуются права доступа.",
-        responses={204: None},
-    )
-    def delete(self, request, *args, **kwargs):
-        return super().delete(request, *args, **kwargs)
-
-
-#	1.	Проверить, существует ли завершённая сессия между клиентом и психологом.
-#   2.	Если такая сессия не найдена, отклонить запрос с сообщением об ошибке.
-class ReviewCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, *args, **kwargs):
-        # ID текущего пользователя (клиента)
+    def post(self, request):
         client = request.user.clientprofile
-        psychologist_id = request.data.get("psychologist_id")  # ID психолога
-        rating = request.data.get("rating")  # Рейтинг (1-5)
-        text = request.data.get("text")  # Текст отзыва
+        psychologist_id = request.data.get("psychologist_id")
+        rating = request.data.get("rating")
+        text = request.data.get("text", "")
 
-        if not psychologist_id or not rating:
-            return Response(
-                {"error": "Пожалуйста, укажите ID психолога и рейтинг."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if not psychologist_id:
+            return Response({"error": "Не указан ID психолога."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if rating is None or not (1 <= rating <= 5):
+            return Response({"error": "Рейтинг должен быть от 1 до 5."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Проверяем наличие завершённой сессии между клиентом и психологом
             completed_session = Session.objects.filter(
-                Q(client=client) & Q(psychologist_id=psychologist_id) & Q(status="COMPLETED")
-            ).first()
+                client=client, psychologist_id=psychologist_id, status="COMPLETED"
+            ).latest("end_time")
+        except Session.DoesNotExist:
+            return Response({"error": "Вы можете оставить отзыв только после завершённой сессии."}, status=status.HTTP_400_BAD_REQUEST)
 
-            if not completed_session:
-                return Response(
-                    {"error": "Вы можете оставить отзыв только после завершённой сессии с этим психологом."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        if Review.objects.filter(session=completed_session).exists():
+            return Response({"error": "Вы уже оставили отзыв для этой сессии."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Проверяем, существует ли уже отзыв для этой сессии
-            if Review.objects.filter(session=completed_session).exists():
-                return Response(
-                    {"error": "Вы уже оставили отзыв для этой сессии."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        review = Review.objects.create(
+            session=completed_session, client=client, psychologist_id=psychologist_id, rating=rating, text=text
+        )
 
-            # Создаём отзыв
-            review = Review.objects.create(
-                session=completed_session,
-                client_id=client.id,
-                psychologist_id=psychologist_id,
-                client_name=request.user.email,  # Или другое поле для ФИО
-                psychologist_name=completed_session.psychologist.user.email,  # Или другое поле для ФИО
-                rating=rating,
-                text=text,
-            )
+        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
 
-            serializer = ReviewSerializer(review)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+#TELEGRAM LOGIC
 class LinkTelegramView(GenericAPIView):
     serializer_class = TelegramAuthSerializer
 
@@ -796,40 +772,40 @@ class TopicListView(APIView):
         serializer = TopicSerializer(topics, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-class BuyRequestsView(APIView):
-    permission_classes = [IsAuthenticated, IsVerifiedPsychologist]
-    serializer_class = BuyRequestSerializer
-
-    @extend_schema(
-        responses={
-            200: OpenApiResponse(description="Request purchased successfully."),
-            400: OpenApiResponse(description="Insufficient balance."),
-        },
-    )
-    def post(self, request):
-        user = request.user
-        profile = user.psychologist_profile
-
-        COST = 10.00
-
-        if user.balance < COST:
-            return Response(
-                {"error": "Insufficient balance."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        user.balance -= COST
-        user.save()
-
-        profile.requests_count += 1
-        profile.save()
-
-        purchase = PurchasedRequest.objects.create(psychologist=user, cost=COST)
-        return Response(
-            {
-                "detail": "Request purchased successfully!",
-                "remaining_balance": user.balance,
-                "purchased_request_id": purchase.id,
-                "requests_count": profile.requests_count,
-            },
-            status=status.HTTP_200_OK,
-        )
+# class BuyRequestsView(APIView):
+#     permission_classes = [IsAuthenticated, IsVerifiedPsychologist]
+#     serializer_class = BuyRequestSerializer
+#
+#     @extend_schema(
+#         responses={
+#             200: OpenApiResponse(description="Request purchased successfully."),
+#             400: OpenApiResponse(description="Insufficient balance."),
+#         },
+#     )
+#     def post(self, request):
+#         user = request.user
+#         profile = user.psychologist_profile
+#
+#         COST = 10.00
+#
+#         if user.balance < COST:
+#             return Response(
+#                 {"error": "Insufficient balance."}, status=status.HTTP_400_BAD_REQUEST
+#             )
+#
+#         user.balance -= COST
+#         user.save()
+#
+#         profile.requests_count += 1
+#         profile.save()
+#
+#         purchase = PurchasedRequest.objects.create(psychologist=user, cost=COST)
+#         return Response(
+#             {
+#                 "detail": "Request purchased successfully!",
+#                 "remaining_balance": user.balance,
+#                 "purchased_request_id": purchase.id,
+#                 "requests_count": profile.requests_count,
+#             },
+#             status=status.HTTP_200_OK,
+#         )

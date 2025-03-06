@@ -85,7 +85,7 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PsychologistApplication
-        exclude = ['user']
+        fields = '__all__'  # Показываем все поля, включая user
 
     def create(self, validated_data):
         user = self.context['request'].user
@@ -97,15 +97,58 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+class TopicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Topic
+        fields = '__all__'
+
+class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
+    additional_topics = TopicSerializer(many=True, required=False, help_text="Список дополнительных тем")
+    client_name = serializers.CharField(help_text="Имя клиента, как к вам обращаться")
+    birth_date = serializers.DateField(help_text="Дата рождения клиента")
+    gender = serializers.ChoiceField(
+        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
+        help_text="Пол клиента"
+    )
+    psychologist_language = serializers.ChoiceField(
+        choices=[('RU', 'Русский'), ('EN', 'Английский'), ('KZ', 'Казахский')],
+        help_text="Предпочтительный язык общения"
+    )
+    verification_code = serializers.CharField(read_only=True, help_text="Код для привязки Telegram")
+
+    class Meta:
+        model = QuickClientConsultationRequest
+        fields = [
+            'client_name', 'birth_date', 'gender', 'psychologist_language',
+            'preferred_psychologist_age', 'psychologist_gender', 'topic',
+            'comments', 'additional_topics', 'verification_code'
+        ]
+
+    def create(self, validated_data):
+        topics_data = validated_data.pop('additional_topics', [])
+        verification_code = str(random.randint(1000, 9999))
+
+        consultation_request = QuickClientConsultationRequest.objects.create(
+            verification_code=verification_code, **validated_data
+        )
+
+        # Обработка списка: извлекаем ID, если переданы объекты
+        topic_ids = []
+        for topic in topics_data:
+            if isinstance(topic, dict):  # Если передан объект, извлекаем ID
+                topic_id = topic.get("id")
+                if topic_id:
+                    topic_ids.append(topic_id)
+            else:  # Если передан ID, используем его напрямую
+                topic_ids.append(topic)
+
+        consultation_request.additional_topics.set(topic_ids)
+        return consultation_request
+
 # Профиль клиента
 class ClientProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientProfile
-        fields = '__all__'
-
-class PsychologistLevelSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PsychologistLevel
         fields = '__all__'
 
 # Отзыв от клиента психологу
@@ -180,21 +223,15 @@ class CatalogSerializer(serializers.ModelSerializer):
     def get_reviews_count(self, obj) -> int | None:
         return obj.get_reviews_count()
 
-class BuyRequestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = BuyRequest
-        fields = '__all__'
-
 #для вьющек сериализаторы по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistApplication
         fields = [
-            'first_name_ru',
-            'last_name_ru',
-            'middle_name_ru',
-            'communication_language', 'gender', 'city', 'telegram_id', 'email',
-            'about_me_ru', 'catalog_description_ru'
+            'first_name_ru', 'last_name_ru', 'middle_name_ru',
+            'birth_date', 'gender', 'communication_language',
+            'service_countries', 'service_cities',
+            'phone_number', 'telegram_id', 'about_me_ru', 'catalog_description_ru'
         ]
 
 # Квалификация психолога
@@ -203,21 +240,19 @@ class QualificationSerializer(serializers.ModelSerializer):
         model = PsychologistApplication
         fields = [
             'qualification', 'works_with', 'problems_worked_with', 'work_methods',
-            'practice_start_date', 'academic_degree', 'psychologist_directions',
-            'child_psychologist_directions', 'coach_directions', 'additional_specialization',
-            'work_features', 'education', 'education_files'
+            'experience_years', 'academic_degree', 'education', 'education_files'
         ]
 
 class ServicePriceSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistApplication
-        fields = [
-            'session_duration', 'session_price', 'session_discount',
-            'online_session_duration', 'online_session_price', 'online_session_discount',
-            'couple_session_duration', 'couple_session_price', 'couple_session_discount',
-            'couple_online_session_duration', 'couple_online_session_price', 'couple_online_session_discount',
-            'office_address', 'office_photo'
-        ]
+        fields = ['service_sessions']
+
+# загрузка доков
+class DocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistApplication
+        fields = ['education_files']
 
 # 1. faq вопрос/ы и ответ/ы
 class FAQSerializer(serializers.Serializer):
@@ -230,12 +265,6 @@ class FAQListSerializer(serializers.Serializer):
         child=FAQSerializer(),
         required=False  # Чтобы поддерживать пустые списки
     )
-
-#загрузка доков
-class DocumentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PsychologistApplication
-        fields = ['passport_document', 'education_files']
 
 class TelegramAuthSerializer(serializers.Serializer):
     id = serializers.IntegerField()
@@ -282,50 +311,13 @@ class TelegramAuthSerializer(serializers.Serializer):
 
         return user
 
-class TopicSerializer(serializers.ModelSerializer):
+
+class PsychologistLevelSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Topic
+        model = PsychologistLevel
         fields = '__all__'
 
-class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
-    additional_topics = TopicSerializer(many=True, required=False, help_text="Список дополнительных тем")
-    client_name = serializers.CharField(help_text="Имя клиента, как к вам обращаться")
-    birth_date = serializers.DateField(help_text="Дата рождения клиента")
-    gender = serializers.ChoiceField(
-        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
-        help_text="Пол клиента"
-    )
-    psychologist_language = serializers.ChoiceField(
-        choices=[('RU', 'Русский'), ('EN', 'Английский'), ('KZ', 'Казахский')],
-        help_text="Предпочтительный язык общения"
-    )
-    verification_code = serializers.CharField(read_only=True, help_text="Код для привязки Telegram")
-
+class BuyRequestSerializer(serializers.ModelSerializer):
     class Meta:
-        model = QuickClientConsultationRequest
-        fields = [
-            'client_name', 'birth_date', 'gender', 'psychologist_language',
-            'preferred_psychologist_age', 'psychologist_gender', 'topic',
-            'comments', 'additional_topics', 'verification_code'
-        ]
-
-    def create(self, validated_data):
-        topics_data = validated_data.pop('additional_topics', [])
-        verification_code = str(random.randint(1000, 9999))
-
-        consultation_request = QuickClientConsultationRequest.objects.create(
-            verification_code=verification_code, **validated_data
-        )
-
-        # Обработка списка: извлекаем ID, если переданы объекты
-        topic_ids = []
-        for topic in topics_data:
-            if isinstance(topic, dict):  # Если передан объект, извлекаем ID
-                topic_id = topic.get("id")
-                if topic_id:
-                    topic_ids.append(topic_id)
-            else:  # Если передан ID, используем его напрямую
-                topic_ids.append(topic)
-
-        consultation_request.additional_topics.set(topic_ids)
-        return consultation_request
+        model = BuyRequest
+        fields = '__all__'
