@@ -5,4 +5,4 @@ class AilaqConfig(AppConfig):
     name = 'ailaq'
 
     def ready(self):
-        import ailaq.signals  # Подключение сигналов при запуске приложения
+        import ailaq.signals

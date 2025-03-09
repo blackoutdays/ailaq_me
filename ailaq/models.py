@@ -7,6 +7,10 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 import random
 
 import logging
+
+from ailaq.enums import ClientGenderEnum, PsychologistAgeEnum, PsychologistGenderEnum, \
+    CommunicationLanguageEnum, PreferredPsychologistGenderEnum, LanguageEnum
+
 logger = logging.getLogger(__name__)
 
 class CustomUserManager(BaseUserManager):
@@ -111,11 +115,35 @@ class CustomUser(AbstractBaseUser):
     def has_module_perms(self, app_label):
         return self.is_superuser
 
+
 class ClientProfile(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='client_profile')
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='client_profile')
+
+    # Основные поля профиля
+    full_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="Полное имя")
+    age = models.PositiveIntegerField(null=True, blank=True, verbose_name="Возраст")
+    gender = models.CharField(
+        max_length=10,
+        choices=[(tag.name, tag.value) for tag in ClientGenderEnum],
+        null=True,
+        blank=True,
+        verbose_name="Пол"
+    )
+    communication_language = models.CharField(
+        max_length=10,
+        choices=[(tag.name, tag.value) for tag in LanguageEnum],
+        null=True,
+        blank=True,
+        verbose_name="Язык общения"
+    )
+    country = models.CharField(max_length=100, null=True, blank=True, verbose_name="Страна")
+    city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Город")
+
+    # Фото профиля
+    profile_image = models.ImageField(upload_to='profile_images/', null=True, blank=True, verbose_name="Фото профиля")
 
     def __str__(self):
-        return f"ClientProfile for {self.user.email or self.user.telegram_id}"
+        return f"Client Profile: {self.full_name or self.user.email or self.user.telegram_id}"
 
     @property
     def telegram_id(self):
@@ -129,33 +157,28 @@ class Topic(models.Model):
 
 class QuickClientConsultationRequest(models.Model):
     client_name = models.CharField(max_length=255, verbose_name="Как к вам обращаться?")
-    birth_date = models.DateField(verbose_name="Дата рождения")
+    age = models.PositiveIntegerField(null=True, blank=True, verbose_name="Возраст")
     gender = models.CharField(
         max_length=10,
-        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
-        verbose_name="Пол"
+        choices=[(tag.name, tag.value) for tag in ClientGenderEnum],
+        verbose_name="Пол клиента"
     )
     preferred_psychologist_age = models.CharField(
         max_length=20,
-        choices=[('18-25', 'От 18 до 25'), ('25-35', 'От 25 до 35'), ('35+', 'От 35')],
+        choices=[(tag.name, tag.value) for tag in PsychologistAgeEnum],
         verbose_name="Возраст специалиста"
     )
     psychologist_gender = models.CharField(
         max_length=10,
-        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
+        choices=[(tag.name, tag.value) for tag in PreferredPsychologistGenderEnum],
         verbose_name="Пол специалиста"
     )
     psychologist_language = models.CharField(
         max_length=10,
-        choices=[('RU', 'Русский'), ('EN', 'Английский'), ('KZ', 'Казахский')],
+        choices=[(tag.name, tag.value) for tag in CommunicationLanguageEnum],
         verbose_name="Язык общения"
     )
-    topic = models.CharField(max_length=255, verbose_name="Основная тема")
-    additional_topics = models.ManyToManyField(
-        'Topic',
-        related_name='consultations',
-        verbose_name="Дополнительные темы"
-    )
+    topic = models.CharField(max_length=255, verbose_name="Тема")
     comments = models.TextField(verbose_name="Комментарий")
     created_at = models.DateTimeField(default=now)
     verification_code = models.CharField(max_length=6, unique=True, blank=True, null=True,
@@ -171,7 +194,6 @@ class QuickClientConsultationRequest(models.Model):
 
     def __str__(self):
         return f"Заявка от {self.client_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
-
 
 class PsychologistLevel(models.Model):
     name = models.CharField(max_length=50)
@@ -209,20 +231,16 @@ class PsychologistApplication(models.Model):
 
     birth_date = models.DateField(null=True, blank=True)  # Дата рождения
 
-    gender_choices = [
-        ('MALE', 'Мужской'),
-        ('FEMALE', 'Женский'),
-        ('OTHER', 'Другой'),
-    ]
-    gender = models.CharField(max_length=6, choices=gender_choices, null=True, blank=True)
-
-    language_choices = [
-        ('RU', 'Русский'),
-        ('EN', 'Английский'),
-        ('KZ', 'Казахский'),
-    ]
-    communication_language = models.CharField(max_length=2, choices=language_choices, null=True, blank=True)
-
+    gender = models.CharField(
+        max_length=10,
+        choices=[(tag.name, tag.value) for tag in PsychologistGenderEnum],
+        null=True, blank=True
+    )
+    communication_language = models.CharField(
+        max_length=10,
+        choices=[(tag.name, tag.value) for tag in CommunicationLanguageEnum],
+        null=True, blank=True
+    )
     # **Страна и город приема (список с фронта)**
     service_countries = models.JSONField(default=list, blank=True, help_text="Список стран приема")
     service_cities = models.JSONField(default=list, blank=True, help_text="Список городов приема")

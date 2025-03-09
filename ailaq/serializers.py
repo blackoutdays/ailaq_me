@@ -81,11 +81,13 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
     user = serializers.ReadOnlyField(source="user.email")
-    session_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = PsychologistApplication
-        fields = '__all__'  # Показываем все поля, включая user
+        fields = [
+            'user', 'first_name_ru', 'last_name_ru', 'gender', 'qualification', 'is_verified', 'is_in_catalog', 'status'
+        ]
+        read_only_fields = ['user', 'status']
 
     def create(self, validated_data):
         user = self.context['request'].user
@@ -103,12 +105,11 @@ class TopicSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
-    additional_topics = TopicSerializer(many=True, required=False, help_text="Список дополнительных тем")
-    client_name = serializers.CharField(help_text="Имя клиента, как к вам обращаться")
-    birth_date = serializers.DateField(help_text="Дата рождения клиента")
+    client_name = serializers.CharField(help_text="Как к вам обращаться?")
+    age = serializers.DateField(help_text="Возраст")
     gender = serializers.ChoiceField(
         choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
-        help_text="Пол клиента"
+        help_text="Пол"
     )
     psychologist_language = serializers.ChoiceField(
         choices=[('RU', 'Русский'), ('EN', 'Английский'), ('KZ', 'Казахский')],
@@ -119,37 +120,40 @@ class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuickClientConsultationRequest
         fields = [
-            'client_name', 'birth_date', 'gender', 'psychologist_language',
+            'client_name', 'age', 'gender', 'psychologist_language',
             'preferred_psychologist_age', 'psychologist_gender', 'topic',
-            'comments', 'additional_topics', 'verification_code'
+            'comments', 'verification_code'
         ]
 
     def create(self, validated_data):
-        topics_data = validated_data.pop('additional_topics', [])
         verification_code = str(random.randint(1000, 9999))
 
         consultation_request = QuickClientConsultationRequest.objects.create(
             verification_code=verification_code, **validated_data
         )
 
-        # Обработка списка: извлекаем ID, если переданы объекты
-        topic_ids = []
-        for topic in topics_data:
-            if isinstance(topic, dict):  # Если передан объект, извлекаем ID
-                topic_id = topic.get("id")
-                if topic_id:
-                    topic_ids.append(topic_id)
-            else:  # Если передан ID, используем его напрямую
-                topic_ids.append(topic)
-
-        consultation_request.additional_topics.set(topic_ids)
         return consultation_request
 
 # Профиль клиента
 class ClientProfileSerializer(serializers.ModelSerializer):
+    email = serializers.SerializerMethodField()
+
     class Meta:
         model = ClientProfile
-        fields = '__all__'
+        fields = [
+            'full_name',
+            'age',
+            'gender',
+            'communication_language',
+            'country',
+            'city',
+            'profile_image',
+            'email',
+        ]
+
+    def get_email(self, obj):
+        """Возвращает email пользователя, если он указан, иначе пустую строку."""
+        return obj.user.email if obj.user and obj.user.email else ""
 
 # Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):
@@ -321,3 +325,7 @@ class BuyRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = BuyRequest
         fields = '__all__'
+
+
+class EmptySerializer(serializers.Serializer):
+    pass

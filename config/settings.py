@@ -33,8 +33,8 @@ INSTALLED_APPS = [
 ]
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
@@ -161,6 +161,14 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API documentation for the project',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': True,
+    'ENUM_NAME_OVERRIDES': {
+        'ailaq.models.QuickClientConsultationRequest.gender': 'ailaq.enums.ClientGenderEnum',
+        'ailaq.models.QuickClientConsultationRequest.psychologist_gender': 'ailaq.enums.PreferredPsychologistGenderEnum',
+        'ailaq.models.QuickClientConsultationRequest.psychologist_language': 'ailaq.enums.CommunicationLanguageEnum',
+        'ailaq.models.QuickClientConsultationRequest.preferred_psychologist_age': 'ailaq.enums.PsychologistAgeEnum',
+        'ailaq.models.PsychologistApplication.gender': 'ailaq.enums.PsychologistGenderEnum',
+        'ailaq.models.PsychologistApplication.communication_language': 'ailaq.enums.CommunicationLanguageEnum',
+    }
 }
 
 TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN', default='7591573688:AAFtWbtZ4v5UcS1Hyl121gJlxLA8riIuB4Q')

@@ -13,14 +13,11 @@ from ailaq.views  import (
     ClientProfileViewSet
 )
 
-# 🔹 Создаём Router для ViewSet-классов
 router = DefaultRouter()
 router.register(r'catalog', CatalogViewSet, basename='catalog')
 router.register(r'clients', ClientProfileViewSet, basename='client-profiles')
 
-# 🔹 Основные пути API
 urlpatterns = [
-    # Swagger-документация
     path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
 
@@ -62,7 +59,7 @@ urlpatterns = [
 
     # Добавляем `router` для ViewSet
     path('api/', include(router.urls)),
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Добавление обработки медиафайлов в режиме DEBUG
 if settings.DEBUG:

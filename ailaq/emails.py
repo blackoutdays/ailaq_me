@@ -12,18 +12,15 @@ def send_email(subject, message, recipient_list):
     except Exception as e:
         logger.error(f"Error sending email to {', '.join(recipient_list)}: {str(e)}")
 
-
 def send_approval_email(application):
     subject = "Your Psychologist Application Status"
     message = f"Dear {application.user.email},\n\nYour application has been approved.\n\nWelcome to our platform!"
     send_email(subject, message, [application.user.email])
 
-
 def send_rejection_email(application):
     subject = "Your Psychologist Application Status"
     message = f"Dear {application.user.email},\n\nYour application has been rejected.\n\nReason: {application.previous_rejection_comment or 'Not provided.'}"
     send_email(subject, message, [application.user.email])
-
 
 def send_documents_request_email(application):
     subject = "Documents Missing - Please Add Required Documents"

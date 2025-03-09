@@ -2,8 +2,8 @@ from django.contrib import admin, messages
 from django.utils.html import format_html
 from .models import PsychologistApplication, PsychologistProfile, ClientProfile, CustomUser, PsychologistFAQ
 from .services import process_psychologist_application, send_documents_request_email
-
 import logging
+
 logger = logging.getLogger(__name__)
 
 # FAQ психолога: вопрос/ответ

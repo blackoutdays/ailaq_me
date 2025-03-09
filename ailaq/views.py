@@ -1,10 +1,11 @@
 #views
+import time
 import hmac
 from asgiref.sync import async_to_sync
+from django.http.multipartparser import MultiPartParser
 from django.utils.timezone import now
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-import time
 from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
 from hashlib import sha256
@@ -12,7 +13,6 @@ from rest_framework import status, viewsets
 from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.views import APIView
-from django.db.models import Q
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
@@ -26,14 +26,14 @@ from .serializers import (
     PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
     BuyRequestSerializer, PersonalInfoSerializer, QualificationSerializer, DocumentSerializer,
     FAQSerializer, FAQListSerializer, TopicSerializer, QuickClientConsultationRequestSerializer, TelegramAuthSerializer,
-    ServicePriceSerializer
+    ServicePriceSerializer, EmptySerializer
 )
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.pagination import PageNumberPagination
-from .pagination import StandardResultsSetPagination
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils.decorators import method_decorator
 import telegram
 import logging
@@ -132,7 +132,7 @@ class RegisterUserView(APIView):
                 return Response({"password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
             user = serializer.save()
-            if user.wants_to_be_psychолог:
+            if user.wants_to_be_psychologist:
                 PsychologistApplication.objects.get_or_create(user=user)
 
             refresh = RefreshToken.for_user(user)
@@ -146,7 +146,6 @@ class RegisterUserView(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 # 🔹 **Авторизация с русскими ошибками**
 class LoginView(APIView):
@@ -243,9 +242,8 @@ class CatalogViewSet(ReadOnlyModelViewSet):
         'is_verified': ['exact'],
         'is_in_catalog': ['exact'],
         'requests_count': ['gte', 'lte'],
-        'application__session_price': ['gte', 'lte']
     }
-    ordering_fields = ['application__id', 'requests_count', 'application__session_price']
+    ordering_fields = ['application__id', 'requests_count']
     ordering = ['application__id']
 
     @extend_schema(
@@ -255,9 +253,7 @@ class CatalogViewSet(ReadOnlyModelViewSet):
             OpenApiParameter("is_in_catalog", description="Фильтр по наличию в каталоге (true/false)", required=False, type=bool),
             OpenApiParameter("requests_count__gte", description="Минимальное количество запросов", required=False, type=int),
             OpenApiParameter("requests_count__lte", description="Максимальное количество запросов", required=False, type=int),
-            OpenApiParameter("application__session_price__gte", description="Минимальная цена за сессию", required=False, type=float),
-            OpenApiParameter("application__session_price__lte", description="Максимальная цена за сессию", required=False, type=float),
-            OpenApiParameter("ordering", description="Сортировка (application__id, requests_count, application__session_price)", required=False, type=str),
+            OpenApiParameter("ordering", description="Сортировка (application__id, requests_count)", required=False, type=str),
             OpenApiParameter("page", description="Номер страницы", required=False, type=int),
             OpenApiParameter("page_size", description="Количество элементов на странице (по умолчанию 10)", required=False, type=int),
         ],
@@ -268,10 +264,70 @@ class CatalogViewSet(ReadOnlyModelViewSet):
 class ClientProfileViewSet(viewsets.ModelViewSet):
     queryset = ClientProfile.objects.all()
     serializer_class = ClientProfileSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)  # Добавить это
 
-    @extend_schema(description="Retrieve a client's profile.")
-    def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
+    def get_queryset(self):
+        """Возвращает профиль только текущего пользователя."""
+        return ClientProfile.objects.filter(user=self.request.user)
+
+    @extend_schema(
+        description="Получить профиль текущего клиента.",
+        responses={200: ClientProfileSerializer},
+    )
+    def list(self, request, *args, **kwargs):
+        """Возвращает профиль текущего аутентифицированного клиента."""
+        try:
+            profile = ClientProfile.objects.get(user=request.user)
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ClientProfile.DoesNotExist:
+            return Response({"detail": "Профиль клиента не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+    @extend_schema(
+        description="Создать или обновить профиль клиента.",
+        request=ClientProfileSerializer,
+        responses={200: ClientProfileSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        """Создаёт профиль клиента или обновляет, если он уже существует."""
+        profile, created = ClientProfile.objects.get_or_create(user=request.user)
+        serializer = self.get_serializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            return Response(serializer.data, status=status_code)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @extend_schema(
+        description="Частичное обновление профиля клиента.",
+        request=ClientProfileSerializer,
+        responses={200: ClientProfileSerializer},
+    )
+    def partial_update(self, request, *args, **kwargs):
+        """Обновляет профиль текущего клиента."""
+        try:
+            profile = ClientProfile.objects.get(user=request.user)
+            serializer = self.get_serializer(profile, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except ClientProfile.DoesNotExist:
+            return Response({"detail": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+    @extend_schema(
+        description="Удалить профиль клиента.",
+        responses={204: None},
+    )
+    def destroy(self, request, *args, **kwargs):
+        """Удаляет профиль текущего клиента."""
+        try:
+            profile = ClientProfile.objects.get(user=request.user)
+            profile.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ClientProfile.DoesNotExist:
+            return Response({"detail": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
 
 # 🔹 Получение полного профиля психолога
 class PsychologistProfileView(APIView):
@@ -283,13 +339,16 @@ class PsychologistProfileView(APIView):
     @extend_schema(
         summary="Получить полный профиль психолога",
         description="Возвращает данные психолога, включая личную информацию, квалификацию, услуги, FAQ и отзывы.",
-        responses={200: {
-            "personal_info": PersonalInfoSerializer,
-            "qualification": QualificationSerializer,
-            "service_price": ServicePriceSerializer,
-            "faq": FAQListSerializer,
-            "reviews": ReviewSerializer(many=True),
-        }}
+        responses={200: OpenApiResponse(
+            description="Полный профиль психолога",
+            examples={
+                "personal_info": PersonalInfoSerializer().data,
+                "qualification": QualificationSerializer().data,
+                "service_price": ServicePriceSerializer().data,
+                "faq": FAQListSerializer().data,
+                "reviews": ReviewSerializer(many=True).data,
+            }
+        )}
     )
     def get(self, request):
         try:
@@ -638,7 +697,6 @@ class TelegramAuthView(GenericAPIView):
             logger.error(f"Telegram auth failed: {str(e)}")
             return Response({"error": "Internal server error."}, status=500)
 
-
 class VerificationCodeView(GenericAPIView):
     permission_classes = [IsAuthenticated]
 
@@ -663,9 +721,9 @@ class VerificationCodeView(GenericAPIView):
                 "message": "Verification code is not available or has expired. Request a new code if needed."
             }, status=404)
 
-
 class NewVerificationCodeView(GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = EmptySerializer
 
     @extend_schema(
         summary="Request New Verification Code",
@@ -771,41 +829,3 @@ class TopicListView(APIView):
         topics = Topic.objects.all()
         serializer = TopicSerializer(topics, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
-# class BuyRequestsView(APIView):
-#     permission_classes = [IsAuthenticated, IsVerifiedPsychologist]
-#     serializer_class = BuyRequestSerializer
-#
-#     @extend_schema(
-#         responses={
-#             200: OpenApiResponse(description="Request purchased successfully."),
-#             400: OpenApiResponse(description="Insufficient balance."),
-#         },
-#     )
-#     def post(self, request):
-#         user = request.user
-#         profile = user.psychologist_profile
-#
-#         COST = 10.00
-#
-#         if user.balance < COST:
-#             return Response(
-#                 {"error": "Insufficient balance."}, status=status.HTTP_400_BAD_REQUEST
-#             )
-#
-#         user.balance -= COST
-#         user.save()
-#
-#         profile.requests_count += 1
-#         profile.save()
-#
-#         purchase = PurchasedRequest.objects.create(psychologist=user, cost=COST)
-#         return Response(
-#             {
-#                 "detail": "Request purchased successfully!",
-#                 "remaining_balance": user.balance,
-#                 "purchased_request_id": purchase.id,
-#                 "requests_count": profile.requests_count,
-#             },
-#             status=status.HTTP_200_OK,
-#         )
