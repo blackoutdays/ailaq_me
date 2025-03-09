@@ -46,6 +46,12 @@ class CustomUserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+
+        if not extra_fields.get('is_staff'):
+            raise ValueError('Superuser must have is_staff=True.')
+        if not extra_fields.get('is_superuser'):
+            raise ValueError('Superuser must have is_superuser=True.')
+
         return self.create_user(email=email, password=password, **extra_fields)
 
     @staticmethod
@@ -57,7 +63,7 @@ class CustomUserManager(BaseUserManager):
         raise ValueError("Could not generate a unique verification code")
 
 class CustomUser(AbstractBaseUser):
-    telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
+    telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID", editable=False)
     email = models.EmailField(unique=True, null=True, blank=True)
     verification_code = models.CharField(max_length=4, unique=True, null=True, blank=True)
     verification_code_expiration = models.DateTimeField(null=True, blank=True)  # Дата истечения
@@ -73,6 +79,12 @@ class CustomUser(AbstractBaseUser):
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
+
+    def get_username(self):
+        return self.email if self.email else f"tg_{self.telegram_id}"
+
+    def __str__(self):
+        return self.get_username()
 
     def generate_verification_code(self):
         """Генерация нового кода и обновление срока действия."""
@@ -183,10 +195,8 @@ class QuickClientConsultationRequest(models.Model):
     created_at = models.DateTimeField(default=now)
     verification_code = models.CharField(max_length=6, unique=True, blank=True, null=True,
                                          verbose_name="Код подтверждения")
-
     # 🔹 Добавляем telegram_id
-    telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID клиента")
-
+    telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID", editable=False)
     def save(self, *args, **kwargs):
         if not self.verification_code:
             self.verification_code = str(random.randint(100000, 999999))
@@ -372,19 +382,13 @@ class PsychologistApplication(models.Model):
         if not document:
             raise ValueError("Документ не может быть пустым")
 
-        new_document = EducationDocument.objects.create(
-            psychologist_application=self,
-            document=document,
-            year=year,
-            title=title
-        )
+        new_document = EducationDocument(document=document, year=year, title=title)
+        new_document.save()
         self.education_files.add(new_document)
         self.save(update_fields=['education_files'])
 
     def remove_education_document(self, document_id):
-        """
-        Удаляет документ об образовании.
-        """
+        """Удаляет документ об образовании"""
         try:
             doc = self.education_files.get(id=document_id)
             doc.delete()
@@ -394,7 +398,7 @@ class PsychologistApplication(models.Model):
     def __str__(self):
         return f"Заявка психолога {self.user.email} (Стаж: {self.experience_years} лет)"
 
-# **FAQ психолога**
+# FAQ психолога
 class PsychologistFAQ(models.Model):
     application = models.ForeignKey(
         'PsychologistApplication',
@@ -407,7 +411,7 @@ class PsychologistFAQ(models.Model):
     def __str__(self):
         return f"FAQ: {self.question[:50]}..."
 
-#профиль психолога
+# Профиль психолога
 class PsychologistProfile(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="psychologist_profile", unique=True)
     application = models.OneToOneField(
@@ -420,7 +424,7 @@ class PsychologistProfile(models.Model):
 
     is_in_catalog = models.BooleanField(default=False)
     requests_count = models.PositiveIntegerField(default=0)
-    is_verified = models.BooleanField(default=False)  # Поле базы данных
+    is_verified = models.BooleanField(default=False)
 
     def __str__(self):
         return f"PsychologistProfile for {self.user.email}"
@@ -435,8 +439,8 @@ class PsychologistProfile(models.Model):
         self.save()
 
     @staticmethod
-    def process_psychologist_application(application_id):
-        """Обработка заявки психолога."""
+    def process_psychologist_application(application_id: int) -> None:
+        """Обработка заявки психолога на верификацию."""
         try:
             application = PsychologistApplication.objects.get(id=application_id)
 
@@ -456,20 +460,17 @@ class PsychologistProfile(models.Model):
         except PsychologistApplication.DoesNotExist:
             logger.error(f"Application with ID {application_id} not found.")
 
-    def get_average_rating(self):
-        """
-        Рассчитывает средний рейтинг психолога на основе завершённых сессий.
-        Возвращает 0.0, если нет завершённых сессий или отзывов.
-        """
-        sessions_qs = self.sessions.filter(status='COMPLETED')
-        reviews_qs = Review.objects.filter(session__in=sessions_qs)
-        average_rating = reviews_qs.aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0.0
+    def get_average_rating(self) -> float:
+        """Возвращает средний рейтинг психолога на основе завершённых сессий.
+        Если отзывов нет, возвращает 0.0 """
+        average_rating = self.reviews.filter(session__status='COMPLETED').aggregate(
+            avg_rating=Avg('rating')
+        )['avg_rating'] or 0.0
+
         return round(average_rating, 1)
 
     def get_reviews_count(self):
-        """
-        Возвращает количество отзывов для завершённых сессий психолога.
-        """
+        """ Возвращает количество отзывов для завершённых сессий психолога """
         return Review.objects.filter(session__psychologist=self, session__status='COMPLETED').count()
 
 def get_default_cost():

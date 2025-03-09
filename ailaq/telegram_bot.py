@@ -1,14 +1,11 @@
 import logging
 import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-
 import django
 django.setup()
-
 import aiohttp
 from django.contrib.auth import get_user_model
 from config import settings
-
 import nest_asyncio
 from telegram import Update
 from telegram.ext import (
