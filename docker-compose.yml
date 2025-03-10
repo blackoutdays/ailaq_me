@@ -11,8 +11,10 @@ services:
       - "8000:8000"
     environment:
       - DEBUG=True
+      - CELERY_BROKER_URL=redis://redis:6379/0
     depends_on:
       - db
+      - redis
 
   db:
     image: postgres:13
@@ -32,6 +34,24 @@ services:
     ports:
       - "80:80"
     depends_on:
+      - web
+
+  redis:
+      image: redis:6-alpine
+      ports:
+        - "6379:6379"
+
+  worker:
+    build: .
+    command: celery -A config worker -l info
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
       - web
 
 volumes:

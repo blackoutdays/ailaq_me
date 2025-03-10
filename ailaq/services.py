@@ -31,7 +31,6 @@ def process_psychologist_application(application_id):
     except PsychologistApplication.DoesNotExist:
         logger.error(f"Application with ID {application_id} not found.")
 
-
 def handle_missing_documents(application_id):
     """
     Обрабатывает запрос на предоставление недостающих документов.
@@ -46,8 +45,6 @@ def handle_missing_documents(application_id):
             logger.info(f"Document request email sent for application ID {application_id}.")
     except PsychologistApplication.DoesNotExist:
         logger.error(f"Application with ID {application_id} not found.")
-
-
 
 def link_telegram_user(request):
     # Получаем пользователя

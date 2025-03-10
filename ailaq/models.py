@@ -6,7 +6,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 import random
 import logging
-from ailaq.emails import send_approval_email, send_rejection_email
 from ailaq.enums import (
     ClientGenderEnum, PsychologistAgeEnum, PsychologistGenderEnum,
     CommunicationLanguageEnum, PreferredPsychologistGenderEnum, LanguageEnum
@@ -106,7 +105,12 @@ class CustomUser(AbstractBaseUser):
         return self.is_superuser
 
 class ClientProfile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='client_profile')
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        primary_key=True,  # <-- primary_key=True
+        related_name='client_profile'
+    )
 
     # Основные поля профиля
     full_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="Полное имя")
@@ -391,7 +395,12 @@ class PsychologistFAQ(models.Model):
 
 # Профиль психолога
 class PsychologistProfile(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="psychologist_profile", unique=True)
+    user = models.OneToOneField(
+        CustomUser,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name='psychologist_profile'
+    )
     application = models.OneToOneField(
         PsychologistApplication,
         on_delete=models.CASCADE,
@@ -418,7 +427,6 @@ class PsychologistProfile(models.Model):
 
     @staticmethod
     def process_psychologist_application(application_id: int) -> None:
-        """Обработка заявки психолога на верификацию."""
         try:
             application = PsychologistApplication.objects.get(id=application_id)
 
@@ -431,10 +439,14 @@ class PsychologistProfile(models.Model):
                 profile.is_verified = True
                 profile.save()
 
+                # локальный импорт
+                from ailaq.emails import send_approval_email
                 send_approval_email(application)
 
             elif application.status == 'REJECTED':
+                from ailaq.emails import send_rejection_email
                 send_rejection_email(application)
+
         except PsychologistApplication.DoesNotExist:
             logger.error(f"Application with ID {application_id} not found.")
 
@@ -475,6 +487,12 @@ class PurchasedRequest(models.Model):
         return f"Purchase #{self.id} by {self.psychologist.email} on {self.created_at}"
 
 class Session(models.Model):
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELED', 'Canceled'),
+    ]
+
     psychologist = models.ForeignKey(
         PsychologistProfile,
         on_delete=models.CASCADE,
@@ -485,14 +503,15 @@ class Session(models.Model):
         on_delete=models.CASCADE,
         related_name='sessions'
     )
+
     start_time = models.DateTimeField()
     end_time = models.DateTimeField(null=True, blank=True)
-    status_choices = [
-        ('SCHEDULED', 'Scheduled'),
-        ('COMPLETED', 'Completed'),
-        ('CANCELED', 'Canceled'),
-    ]
-    status = models.CharField(max_length=10, choices=status_choices, default='SCHEDULED')
+    status = models.CharField(max_length=10, choices=[('SCHEDULED', 'Scheduled'), ('COMPLETED', 'Completed'), ('CANCELED', 'Canceled')], default='SCHEDULED')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Session #{self.pk} [{self.status}]"
 
 # отзыв за проведенную сессию
 class Review(models.Model):

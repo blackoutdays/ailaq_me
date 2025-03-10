@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
-    Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument
+    Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument, Session
 from django.conf import settings
 from hashlib import sha256
 from django.core.exceptions import ValidationError
@@ -9,6 +9,8 @@ from django.contrib.auth.password_validation import validate_password
 import random
 import hmac
 import time
+from django.utils import timezone
+from datetime import datetime
 
 CustomUser = get_user_model()
 
@@ -355,3 +357,83 @@ class BuyRequestSerializer(serializers.ModelSerializer):
 
 class EmptySerializer(serializers.Serializer):
     pass
+
+class SessionCreateSerializer(serializers.ModelSerializer):
+    """
+    Сериализатор для создания записи на сессию.
+    Пользователь передаёт день/месяц/год/часы/минуты,
+    а в create() мы собираем это в один DateTimeField (start_time).
+    """
+    day = serializers.IntegerField(min_value=1, max_value=31, required=True)
+    month = serializers.IntegerField(min_value=1, max_value=12, required=True)
+    year = serializers.IntegerField(min_value=2023, max_value=2100, required=True)
+    hour = serializers.IntegerField(min_value=0, max_value=23, required=True)
+    minute = serializers.IntegerField(min_value=0, max_value=59, required=True)
+
+    class Meta:
+        model = Session
+        fields = [
+            'id',
+            'psychologist',
+            'day',
+            'month',
+            'year',
+            'hour',
+            'minute',
+            'status',
+            'start_time',
+        ]
+        read_only_fields = ['status', 'start_time']
+
+    def validate(self, attrs):
+        """
+        Собираем дату-время в один объект datetime.
+        Проверяем, что это не прошлая дата.
+        """
+        day = attrs['day']
+        month = attrs['month']
+        year = attrs['year']
+        hour = attrs['hour']
+        minute = attrs['minute']
+
+        try:
+            proposed_dt = datetime(year, month, day, hour, minute)
+            proposed_dt = timezone.make_aware(proposed_dt)  # Делаем дату "offset-aware"
+        except ValueError:
+            raise serializers.ValidationError("Некорректная дата или время.")
+
+        if proposed_dt < timezone.now():
+            raise serializers.ValidationError("Нельзя записаться на прошедшее время.")
+
+        # Сохраняем объект datetime для дальнейшего использования в create()
+        attrs['proposed_dt'] = proposed_dt
+        return attrs
+
+    def create(self, validated_data):
+        """
+        Создаём Session c полем start_time=proposed_dt и status=SCHEDULED.
+        Поле client берётся из авторизованного пользователя.
+        """
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            raise serializers.ValidationError("Пользователь не авторизован.")
+
+        proposed_dt = validated_data.pop('proposed_dt')
+
+        # Убираем из validated_data поля, которых нет в модели
+        for remove_field in ['day', 'month', 'year', 'hour', 'minute']:
+            validated_data.pop(remove_field, None)
+
+        # Получаем профиль клиента
+        try:
+            client_profile = request.user.client_profile
+        except ClientProfile.DoesNotExist:
+            raise serializers.ValidationError("У авторизованного пользователя нет профиля клиента.")
+
+        session_obj = Session.objects.create(
+            client=client_profile,
+            start_time=proposed_dt,
+            status='SCHEDULED',
+            **validated_data
+        )
+        return session_obj

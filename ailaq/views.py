@@ -17,7 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
 from config import settings
-from .emails import send_rejection_email, send_approval_email
+from .emails import send_rejection_email, send_approval_email, send_email
 from .models import PsychologistProfile, PsychologistApplication, ClientProfile, CustomUser, \
     PsychologistFAQ, Review, Session, QuickClientConsultationRequest, Topic, EducationDocument
 from .serializers import (
@@ -25,7 +25,7 @@ from .serializers import (
     LoginSerializer, PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
     PersonalInfoSerializer, QualificationSerializer, DocumentSerializer,
     FAQListSerializer, TopicSerializer, QuickClientConsultationRequestSerializer, TelegramAuthSerializer,
-    ServicePriceSerializer, EmptySerializer
+    ServicePriceSerializer, EmptySerializer, SessionCreateSerializer
 )
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
@@ -36,6 +36,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils.decorators import method_decorator
 import telegram
 import logging
+
 logger = logging.getLogger(__name__)
 
 bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
@@ -860,3 +861,133 @@ class TopicListView(APIView):
         topics = Topic.objects.all()
         serializer = TopicSerializer(topics, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class ScheduleSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Сеансы"],
+        summary="Записаться на сеанс к психологу (с указанием даты/времени)",
+        description="""
+        Клиент создаёт запись (Session со статусом SCHEDULED), 
+        передавая день/месяц/год/часы/минуты.
+        Оповещения (telegram/email) идут клиенту и психологу.
+        """,
+        request=SessionCreateSerializer,
+        responses={201: SessionCreateSerializer}
+    )
+    def post(self, request):
+        """
+        Пример JSON:
+        {
+          "psychologist": 6,    // <-- теперь это user.id психолога
+          "day": 1,
+          "month": 7,
+          "year": 2025,
+          "hour": 14,
+          "minute": 30
+        }
+        """
+        # 1) Проверяем, что вызывающий пользователь — клиент
+        try:
+            client_profile = request.user.client_profile
+        except ClientProfile.DoesNotExist:
+            logger.error(f"ScheduleSessionView: User {request.user.id} is not a client.")
+            return Response(
+                {"error": "Только клиент может записываться на сеанс."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Сериализатору нужно поле 'client', поэтому добавляем
+        data = request.data.copy()
+
+        # 2) Получаем ID психолога, который пришёл в теле запроса
+        psychologist_id = data.get('psychologist')
+        if not psychologist_id:
+            return Response({"error": "Параметр 'psychologist' (ID) обязателен."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # 2а) Ищем профиль психолога (где pk=User.id)
+        psychologist_profile = get_object_or_404(PsychologistProfile, pk=psychologist_id)
+
+        # Дополнительные проверки:
+        # 2б) Проверяем, действительно ли user является психологом
+        if not psychologist_profile.user.is_psychologist:
+            return Response({"error": "Данный пользователь не является психологом."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # 2в) Проверяем, верифицирован ли психолог
+        if not psychologist_profile.is_verified:
+            return Response({"error": "Психолог не верифицирован."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # 2г) Проверяем, есть ли у него купленная заявка
+        application = psychologist_profile.application
+        if not application or application.purchased_applications < 1:
+            return Response({"error": "У психолога нет активных (купленных) заявок."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # 3) Валидируем данные (SessionCreateSerializer)
+        serializer = SessionCreateSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            session_obj = serializer.save()
+            logger.info(f"Session #{session_obj.id} created (client {client_profile.pk}, psych {psychologist_id}).")
+
+            # 4) Отправляем уведомления
+            self.notify_client(client_profile, session_obj)
+            self.notify_psychologist(psychologist_profile, session_obj)
+
+            return Response(SessionCreateSerializer(session_obj).data,
+                            status=status.HTTP_201_CREATED)
+
+        logger.error(f"SessionCreateSerializer invalid: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def notify_client(self, client_profile, session_obj):
+        telegram_id = getattr(client_profile.user, 'telegram_id', None)
+        if telegram_id:
+            try:
+                bot.send_message(
+                    chat_id=telegram_id,
+                    text=f"Вы записаны на сеанс #{session_obj.id} (время: {session_obj.start_time})."
+                )
+            except Exception as e:
+                logger.error(f"Ошибка при отправке уведомления клиенту в Telegram: {str(e)}")
+
+        email = client_profile.user.email
+        if email:
+            subject = "Запись на сеанс"
+            body = (
+                f"Вы успешно записались на сеанс #{session_obj.id}!\n"
+                f"Дата/время: {session_obj.start_time}\n"
+                f"Статус: {session_obj.status}\n\n"
+                "С уважением,\nВаша компания."
+            )
+            send_email(to=email, subject=subject, body=body)
+
+    def notify_psychologist(self, psychologist_profile, session_obj):
+        telegram_id = getattr(psychologist_profile.user, 'telegram_id', None)
+        if telegram_id:
+            try:
+                bot.send_message(
+                    chat_id=telegram_id,
+                    text=(
+                        f"Новая запись на сеанс #{session_obj.id} "
+                        f"от клиента #{session_obj.client.pk}.\n"
+                        f"Время: {session_obj.start_time}."
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Ошибка при отправке уведомления психологу в Telegram: {str(e)}")
+
+        email = psychologist_profile.user.email
+        if email:
+            subject = "Новая запись на сеанс"
+            body = (
+                f"У вас новая запись (Session #{session_obj.id})!\n"
+                f"От клиента: #{session_obj.client.pk}.\n"
+                f"Дата/время: {session_obj.start_time}\n"
+                f"Статус: {session_obj.status}\n\n"
+                "С уважением,\nВаша компания."
+            )
+            send_email(to=email, subject=subject, body=body)

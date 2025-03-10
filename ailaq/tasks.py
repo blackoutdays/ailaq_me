@@ -2,6 +2,22 @@
 from . import models
 from .models import PsychologistApplication, PsychologistLevel
 from datetime import date
+from celery import shared_task
+import logging
+from django.core.mail import send_mail
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+@shared_task
+def send_email_async(subject, message, recipient_list):
+    """
+    Асинхронная отправка письма через Celery.
+    """
+    try:
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, recipient_list)
+        logger.info(f"Email sent to {', '.join(recipient_list)} (async)")
+    except Exception as e:
+        logger.error(f"Error sending async email to {', '.join(recipient_list)}: {str(e)}")
 
 def check_psychologist_level(user):
     """ Проверка уровня психолога на основе количества просроченных заявок. """

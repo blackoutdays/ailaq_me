@@ -10,7 +10,7 @@ from ailaq.views import (
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
     ReviewListView, TelegramAuthView, LinkTelegramView, VerificationCodeView,
     NewVerificationCodeView, QuickClientConsultationAPIView, CatalogViewSet,
-    ClientProfileViewSet, ServicePriceView
+    ClientProfileViewSet, ServicePriceView, ScheduleSessionView
 )
 
 router = DefaultRouter()
@@ -57,6 +57,9 @@ urlpatterns = [
 
     # Быстрая консультация (Telegram)
     path('api/quick-consultation/', QuickClientConsultationAPIView.as_view(), name='quick_consultation_api'),
+
+    # Запись на сеанс
+    path('api/sessions/schedule/', ScheduleSessionView.as_view(), name='schedule-session'),
 
     path('api/', include(router.urls)),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

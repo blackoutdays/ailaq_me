@@ -17,4 +17,4 @@ COPY . .
 
 ENV PYTHONUNBUFFERED 1
 
-CMD ["bash", "-c", "python manage.py migrate && gunicorn --bind 0.0.0.0:8000 config.wsgi:application --workers=4 --timeout=120"]
+CMD ["bash", "-c", "python manage.py migrate && gunicorn --bind 0.0.0.0:8000 config.wsgi:application --workers=4 --timeout=600"]
