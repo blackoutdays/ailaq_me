@@ -129,11 +129,11 @@ class QuickClientConsultationAPIView(APIView):
         if serializer.is_valid():
             consultation_request = serializer.save()
 
-            # 🔹 Исправленный вызов асинхронного метода в синхронном контексте
+            # вызов асинхронного метода в синхронном контексте
             bot_info = async_to_sync(self.get_bot_info)()
             redirect_url = f"https://t.me/{bot_info.username}?start=quick_{consultation_request.verification_code}"
 
-            # 🔹 Проверяем, есть ли telegram_id, и отправляем сообщение
+            # Проверяем, есть ли telegram_id, и отправляем сообщение
             if consultation_request.telegram_id:
                 async_to_sync(self.send_telegram_message)(consultation_request.telegram_id, consultation_request.pk)
 
@@ -149,7 +149,6 @@ class QuickClientConsultationAPIView(APIView):
 
         return JsonResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # 🔹 Исправленный вызов бота (сделали статическим методом, так как внутри APIView)
     @staticmethod
     async def get_bot_info():
         return await bot.get_me()
@@ -268,7 +267,7 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
         except ClientProfile.DoesNotExist:
             return Response({"detail": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
 
-# 🔹 Получение полного профиля психолога
+# Получение полного профиля психолога
 class PsychologistProfileView(APIView):
     """
     Получает весь профиль психолога, включая отзывы.
@@ -309,7 +308,7 @@ class PsychologistProfileView(APIView):
             return Response({"error": "Не удалось получить профиль психолога."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# 🔹 Сохранение личной информации (POST)
+# Сохранение и получение личной информации
 class PersonalInfoView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -327,7 +326,6 @@ class PersonalInfoView(APIView):
             logger.error(f"Ошибка при получении личной информации: {str(e)}")
             return Response({"error": "Не удалось получить личную информацию."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
     @extend_schema(
         tags=["Психолог"],
@@ -359,7 +357,7 @@ class PersonalInfoView(APIView):
             return Response({"error": "Не удалось сохранить личную информацию."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# 🔹 Сохранение квалификации (POST)
+# Сохранение и получение квалификации
 class QualificationView(APIView):
     """
     Сохранение квалификации психолога, включая загрузку файлов.
@@ -433,7 +431,7 @@ class QualificationView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-# 🔹 Сохранение стоимости услуг (POST)
+# Сохранение и получение стоимости услуг
 class ServicePriceView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -472,7 +470,7 @@ class ServicePriceView(APIView):
             logger.error(f"Ошибка при сохранении стоимости услуг: {str(e)}")
             return Response({"error": "Не удалось сохранить стоимость услуг."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# 🔹 Сохранение и получение FAQ психолога (POST)
+# Сохранение и получение FAQ психолога
 class FAQView(APIView):
     """
     Получение и сохранение FAQ психолога.
@@ -490,7 +488,6 @@ class FAQView(APIView):
             application = get_object_or_404(PsychologistApplication, user=request.user)
             faqs = application.faqs.all()
 
-            # Корректное использование FAQListSerializer
             serializer = FAQListSerializer({"faqs": faqs})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
@@ -524,7 +521,7 @@ class FAQView(APIView):
             logger.error(f"Ошибка при сохранении FAQ: {str(e)}")
             return Response({"error": "Не удалось сохранить FAQ."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# 🔹 Загрузка документов
+# Загрузка документов
 class DocumentView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -552,9 +549,7 @@ class DocumentView(APIView):
             return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
 
 class ReviewListView(APIView):
-    """
-    Получение списка отзывов о психологе.
-    """
+    """Получение списка отзывов о психологе"""
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -577,7 +572,6 @@ class ReviewListView(APIView):
         psychologist = get_object_or_404(PsychologistProfile, id=psychologist_id)
         reviews = Review.objects.filter(psychologist=psychologist).order_by("-created_at")
 
-        # Пагинация
         paginator = PageNumberPagination()
         paginated_reviews = paginator.paginate_queryset(reviews, request)
         serializer = ReviewSerializer(paginated_reviews, many=True)
@@ -585,9 +579,7 @@ class ReviewListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 class ReviewCreateView(APIView):
-    """
-    Оставить отзыв о психологе. Клиент может оставить отзыв только после завершённой сессии.
-    """
+    """Оставить отзыв о психологе. Клиент может оставить отзыв только после завершённой сессии"""
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -624,7 +616,6 @@ class ReviewCreateView(APIView):
         )
 
         return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
-
 
 #TELEGRAM LOGIC
 class LinkTelegramView(GenericAPIView):

@@ -58,7 +58,6 @@ urlpatterns = [
     # Быстрая консультация (Telegram)
     path('api/quick-consultation/', QuickClientConsultationAPIView.as_view(), name='quick_consultation_api'),
 
-    # Добавляем `router` для ViewSet
     path('api/', include(router.urls)),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
