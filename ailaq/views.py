@@ -17,8 +17,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
 from config import settings
+from .emails import send_rejection_email, send_approval_email
 from .models import PsychologistProfile, PsychologistApplication, ClientProfile, CustomUser, \
-    PsychologistFAQ, Review, Session, QuickClientConsultationRequest, Topic
+    PsychologistFAQ, Review, Session, QuickClientConsultationRequest, Topic, EducationDocument
 from .serializers import (
     CustomUserCreationSerializer,
     LoginSerializer, PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
@@ -43,6 +44,7 @@ class RegisterUserView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
+        tags=["Авторизация/Регистрация"],
         request=CustomUserCreationSerializer,
         responses={201: OpenApiResponse(description="Пользователь успешно зарегистрирован.")},
     )
@@ -79,11 +81,12 @@ class RegisterUserView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# 🔹 **Авторизация с русскими ошибками**
+# Авторизация
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
+        tags=["Авторизация/Регистрация"],
         request=LoginSerializer,
         responses={200: OpenApiResponse(description="Успешный вход в систему.")},
     )
@@ -116,6 +119,7 @@ class LoginView(APIView):
 class QuickClientConsultationAPIView(APIView):
 
     @extend_schema(
+        tags=["Клиент - быстрая консультация"],
         request=QuickClientConsultationRequestSerializer,
         responses={201: QuickClientConsultationRequestSerializer},
         description="Создание запроса на быструю консультацию и генерация ссылки на виджет Telegram."
@@ -137,7 +141,8 @@ class QuickClientConsultationAPIView(APIView):
                 {
                     "message": "Заявка создана",
                     "redirect_url": redirect_url,
-                    "verification_code": consultation_request.verification_code
+                    "verification_code": consultation_request.verification_code,
+                    "consultation_request": serializer.data
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -179,6 +184,7 @@ class CatalogViewSet(ReadOnlyModelViewSet):
     ordering = ['application__id']
 
     @extend_schema(
+        tags=["Каталог психологов"],
         description="Получить список психологов с фильтрацией, сортировкой и пагинацией.",
         parameters=[
             OpenApiParameter("is_verified", description="Фильтр по верификации (true/false)", required=False, type=bool),
@@ -204,6 +210,7 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
         return ClientProfile.objects.filter(user=self.request.user)
 
     @extend_schema(
+        tags=["Клиент"],
         description="Получить профиль текущего клиента.",
         responses={200: ClientProfileSerializer},
     )
@@ -269,6 +276,7 @@ class PsychologistProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["Психолог"],
         summary="Получить полный профиль заявки психолога",
         description="Возвращает данные заявки психолога, включая личную информацию, квалификацию, услуги, FAQ и отзывы.",
         responses={200: OpenApiResponse(description="Полная заявка психолога")}
@@ -291,7 +299,7 @@ class PsychologistProfileView(APIView):
                 "personal_info": PersonalInfoSerializer(application).data,
                 "qualification": QualificationSerializer(application).data,
                 "service_price": ServicePriceSerializer(application).data,
-                "faq": FAQListSerializer(application.faqs.all(), many=True).data,
+                "faq": FAQListSerializer({"faqs": application.faqs.all()}).data,
                 "reviews": reviews_serializer.data,
             }
 
@@ -300,14 +308,30 @@ class PsychologistProfileView(APIView):
             logger.error(f"Ошибка при получении профиля психолога: {str(e)}")
             return Response({"error": "Не удалось получить профиль психолога."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # 🔹 Сохранение личной информации (POST)
 class PersonalInfoView(APIView):
-    """
-    Сохранение личной информации в заявке психолога.
-    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["Психолог"],
+        summary="Получить личную информацию психолога",
+        responses={200: PersonalInfoSerializer}
+    )
+    def get(self, request):
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
+            serializer = PersonalInfoSerializer(application)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Ошибка при получении личной информации: {str(e)}")
+            return Response({"error": "Не удалось получить личную информацию."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Сохранить личную информацию психолога",
         request=PersonalInfoSerializer,
         responses={200: PersonalInfoSerializer}
     )
@@ -338,11 +362,29 @@ class PersonalInfoView(APIView):
 # 🔹 Сохранение квалификации (POST)
 class QualificationView(APIView):
     """
-    Сохранение квалификации психолога.
+    Сохранение квалификации психолога, включая загрузку файлов.
     """
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
 
     @extend_schema(
+        tags=["Психолог"],
+        summary="Получить квалификацию психолога",
+        responses={200: QualificationSerializer}
+    )
+    def get(self, request):
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
+            serializer = QualificationSerializer(application)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Ошибка при получении квалификации: {str(e)}")
+            return Response({"error": "Не удалось получить квалификацию."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Сохранить квалификацию психолога",
         request=QualificationSerializer,
         responses={200: QualificationSerializer}
     )
@@ -352,22 +394,67 @@ class QualificationView(APIView):
             serializer = QualificationSerializer(application, data=request.data, partial=True)
 
             if serializer.is_valid():
+                # Сохранение полей квалификации
                 serializer.save()
+
+                # Обработка загружаемых файлов
+                office_photo = serializer.validated_data.get('office_photo')
+                education_files = serializer.validated_data.get('education_files', [])
+
+                # Сохранение фото офиса
+                if office_photo:
+                    application.office_photo = office_photo
+
+                # Сохранение документов об образовании
+                for file_data in education_files:
+                    document = file_data.get('document')
+                    year = file_data.get('year')
+                    title = file_data.get('title') or document.name
+                    file_signature = file_data.get('file_signature', "")
+
+                    EducationDocument.objects.create(
+                        psychologist_application=application,
+                        document=document,
+                        year=year,
+                        title=title,
+                        file_signature=file_signature
+                    )
+
+                application.save()
+
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
             logger.error(f"Ошибка при сохранении квалификации: {str(e)}")
-            return Response({"error": "Не удалось сохранить квалификацию."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": "Не удалось сохранить квалификацию.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # 🔹 Сохранение стоимости услуг (POST)
 class ServicePriceView(APIView):
-    """
-    Сохранение стоимости услуг психолога.
-    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["Психолог"],
+        summary="Получить стоимость услуг психолога",
+        responses={200: ServicePriceSerializer}
+    )
+    def get(self, request):
+        try:
+            application = get_object_or_404(PsychologistApplication, user=request.user)
+            serializer = ServicePriceSerializer(application)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Ошибка при получении стоимости услуг: {str(e)}")
+            return Response({"error": "Не удалось получить стоимость услуг."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Сохранить стоимость услуг психолога",
         request=ServicePriceSerializer,
         responses={200: ServicePriceSerializer}
     )
@@ -393,23 +480,27 @@ class FAQView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["Психолог"],
         operation_id="get_faqs",
-        description="Получить список FAQ текущего пользователя.",
+        summary="Получить список FAQ текущего психолога.",
         responses={200: FAQListSerializer, 404: {"description": "FAQ не найдены."}},
     )
     def get(self, request):
         try:
             application = get_object_or_404(PsychologistApplication, user=request.user)
             faqs = application.faqs.all()
-            serializer = FAQListSerializer(faqs, many=True)
+
+            # Корректное использование FAQListSerializer
+            serializer = FAQListSerializer({"faqs": faqs})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Ошибка при получении FAQ: {str(e)}")
             return Response({"error": "Не удалось получить FAQ."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @extend_schema(
+        tags=["Психолог"],
         operation_id="update_faq",
-        description="Сохранить список FAQ (заменяет все старые вопросы).",
+        summary="Сохранить список FAQ (заменяет все старые вопросы).",
         request=FAQListSerializer,
         responses={200: {"description": "FAQ сохранены успешно."}, 400: {"description": "Ошибка валидации."}},
     )
@@ -438,6 +529,7 @@ class DocumentView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["Психолог"],
         request=DocumentSerializer,
         responses={200: DocumentSerializer}
     )
@@ -466,6 +558,7 @@ class ReviewListView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
+        tags=["Психолог"],
         summary="Получить список отзывов о психологе",
         description="Возвращает все отзывы, оставленные клиентами для конкретного психолога.",
         parameters=[
@@ -498,6 +591,7 @@ class ReviewCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["Клиент"],
         summary="Создать отзыв",
         description="Клиент может оставить отзыв о психологе только после завершённой сессии.",
         request=ReviewSerializer,
@@ -531,46 +625,53 @@ class ReviewCreateView(APIView):
 
         return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
 
+
 #TELEGRAM LOGIC
 class LinkTelegramView(GenericAPIView):
     serializer_class = TelegramAuthSerializer
 
     def post(self, request):
-        try:
-            verification_code = request.data.get("verification_code")
-            telegram_id = request.data.get("telegram_id")
+        verification_code = request.data.get("verification_code")
+        telegram_id = request.data.get("telegram_id")
 
-            if not verification_code or not telegram_id:
-                return Response({"error": "Verification code and Telegram ID are required."}, status=400)
+        if not verification_code or not telegram_id:
+            return Response(
+                {"error": "Verification code and Telegram ID are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-            # 🔹 Пробуем найти код в CustomUser
-            user = CustomUser.objects.filter(verification_code=verification_code).first()
-            if user:
-                if user.verification_code_expiration and now() > user.verification_code_expiration:
-                    return Response({"error": "Verification code has expired."}, status=400)
+        # Проверка уникальности Telegram ID
+        if CustomUser.objects.filter(telegram_id=telegram_id).exists():
+            return Response(
+                {"error": "Telegram ID уже привязан к другому аккаунту."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-                user.telegram_id = telegram_id
-                user.verification_code = None
-                user.verification_code_expiration = None
-                user.save()
+        user = CustomUser.objects.filter(
+            verification_code=verification_code,
+            verification_code_expiration__gte=now()
+        ).first()
 
-                return Response({"message": "Telegram ID linked successfully (User)."}, status=200)
+        if user:
+            user.telegram_id = telegram_id
+            user.verification_code = None
+            user.verification_code_expiration = None
+            user.save(update_fields=['telegram_id', 'verification_code', 'verification_code_expiration'])
 
-            # 🔹 Пробуем найти код в QuickClientConsultationRequest
-            consultation_request = QuickClientConsultationRequest.objects.filter(
-                verification_code=verification_code
-            ).first()
-            if consultation_request:
-                consultation_request.telegram_id = telegram_id
-                consultation_request.save()
+            return Response({"message": "Telegram ID linked successfully."}, status=200)
 
-                return Response({"message": "Telegram ID linked successfully (Consultation Request)."}, status=200)
+        consultation_request = QuickClientConsultationRequest.objects.filter(
+            verification_code=verification_code
+        ).first()
 
-            return Response({"error": "Invalid verification code."}, status=400)
+        if consultation_request:
+            consultation_request.telegram_id = telegram_id
+            consultation_request.verification_code = None
+            consultation_request.save(update_fields=['telegram_id', 'verification_code'])
 
-        except Exception as e:
-            logger.error(f"Error linking Telegram: {str(e)}")
-            return Response({"error": "Internal server error."}, status=500)
+            return Response({"message": "Telegram ID linked successfully (Consultation Request)."}, status=200)
+
+        return Response({"error": "Invalid or expired verification code."}, status=400)
 
 class TelegramAuthView(GenericAPIView):
     serializer_class = TelegramAuthSerializer
@@ -612,9 +713,7 @@ class TelegramAuthView(GenericAPIView):
                 user.save()
 
             if created:
-                if user.is_psychologist:
-                    PsychologistProfile.objects.create(user=user)
-                else:
+                if not user.is_psychologist:
                     ClientProfile.objects.create(user=user)
 
             refresh = RefreshToken.for_user(user)
@@ -627,12 +726,13 @@ class TelegramAuthView(GenericAPIView):
 
         except Exception as e:
             logger.error(f"Telegram auth failed: {str(e)}")
-            return Response({"error": "Internal server error."}, status=500)
+            return Response({"error": "Ошибка авторизации через Telegram."}, status=500)
 
 class VerificationCodeView(GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["Код верификации"],
         summary="Get Current Verification Code",
         description="Получить текущий верификационный код пользователя.",
         responses={
@@ -658,6 +758,7 @@ class NewVerificationCodeView(GenericAPIView):
     serializer_class = EmptySerializer
 
     @extend_schema(
+        tags=["Код верификации"],
         summary="Request New Verification Code",
         description="Сгенерировать новый уникальный верификационный код для текущего пользователя.",
         responses={
@@ -677,7 +778,7 @@ class NewVerificationCodeView(GenericAPIView):
     def post(self, request):
         try:
             user = request.user
-            new_code = user.generate_new_verification_code()
+            new_code = user.generate_verification_code()
             return Response({
                 "new_verification_code": new_code,
                 "message": "A new verification code has been generated successfully.",
@@ -692,6 +793,7 @@ class AdminApprovePsychologistView(GenericAPIView):
     permission_classes = [IsAdminUser]
 
     @extend_schema(
+        tags=["Админ"],
         responses={
             200: PsychologistApplicationSerializer(many=True),
         },
@@ -731,17 +833,23 @@ class AdminApprovePsychologistView(GenericAPIView):
                 user.is_psychologist = True
                 user.save()
 
-                profile, _ = PsychologistProfile.objects.get_or_create(user=user)
+                profile, _ = PsychologistProfile.objects.get_or_create(user=user, application=application)
                 profile.is_verified = True
-                profile.save()
+                profile.update_catalog_visibility()  # важно обновить статус для отображения в каталоге
+
+                send_approval_email(application)  # отправляем уведомление об одобрении
 
                 return Response(
                     {"message": "Psychologist approved successfully."},
                     status=status.HTTP_200_OK,
                 )
+
             elif action == "REJECT":
                 application.status = "REJECTED"
                 application.save()
+
+                send_rejection_email(application)  # уведомление о отклонении
+
                 return Response(
                     {"message": "Psychologist application rejected."},
                     status=status.HTTP_200_OK,

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
-    Review, BuyRequest, Topic, QuickClientConsultationRequest
+    Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument
 from django.conf import settings
 from hashlib import sha256
 from django.core.exceptions import ValidationError
@@ -39,6 +39,9 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.verification_code = CustomUser._default_manager.generate_unique_verification_code()
         user.save()
+
+        if user.wants_to_be_psychologist:
+            PsychologistApplication.objects.get_or_create(user=user)
 
         return user
 
@@ -104,8 +107,15 @@ class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
 
 # Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):
-    psychologist_name = serializers.ReadOnlyField(source='psychologist_id.user.email')
-    client_name = serializers.ReadOnlyField(source='client.user.email')
+    psychologist_name = serializers.SerializerMethodField()
+    client_name = serializers.SerializerMethodField()
+
+    def get_psychologist_name(self, obj):
+        return obj.psychologist.user.email
+
+    def get_client_name(self, obj):
+        return obj.client.user.email
+
     class Meta:
         model = Review
         fields = [
@@ -238,13 +248,27 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
             'phone_number', 'telegram_id', 'about_me_ru', 'catalog_description_ru'
         ]
 
+class EducationDocumentSerializer(serializers.ModelSerializer):
+    document = serializers.FileField(required=True)
+    year = serializers.IntegerField(required=False, allow_null=True)
+    title = serializers.CharField(required=False, allow_blank=True)
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = EducationDocument
+        fields = ['document', 'year', 'title', 'file_signature']
 # Квалификация психолога
 class QualificationSerializer(serializers.ModelSerializer):
+    office_photo = serializers.ImageField(required=False, allow_null=True)
+    education_files = EducationDocumentSerializer(many=True, required=False)
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = PsychologistApplication
         fields = [
             'qualification', 'works_with', 'problems_worked_with', 'work_methods',
-            'experience_years', 'academic_degree', 'education', 'education_files'
+            'experience_years', 'academic_degree', 'education',
+            'office_photo', 'education_files', 'file_signature'
         ]
 
 class ServicePriceSerializer(serializers.ModelSerializer):
@@ -254,9 +278,17 @@ class ServicePriceSerializer(serializers.ModelSerializer):
 
 # загрузка доков
 class DocumentSerializer(serializers.ModelSerializer):
+    office_photo = serializers.ImageField(required=False, allow_null=True)
+    education_files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        allow_empty=True
+    )
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = PsychologistApplication
-        fields = ['education_files']
+        fields = ['office_photo', 'education_files', 'file_signature']
 
 # 1. faq вопрос/ы и ответ/ы
 class FAQSerializer(serializers.Serializer):

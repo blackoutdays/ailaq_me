@@ -5,12 +5,12 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from ailaq.views  import (
+from ailaq.views import (
     LoginView, RegisterUserView, AdminApprovePsychologistView, PsychologistProfileView,
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
     ReviewListView, TelegramAuthView, LinkTelegramView, VerificationCodeView,
     NewVerificationCodeView, QuickClientConsultationAPIView, CatalogViewSet,
-    ClientProfileViewSet
+    ClientProfileViewSet, ServicePriceView
 )
 
 router = DefaultRouter()
@@ -36,6 +36,7 @@ urlpatterns = [
     path('api/psychologist/profile/', PsychologistProfileView.as_view(), name='psychologist-profile'),
     path('api/psychologist/profile/personal-info/', PersonalInfoView.as_view(), name='personal-info'),
     path('api/psychologist/profile/qualification/', QualificationView.as_view(), name='qualification'),
+    path('api/psychologist/profile/service_price/', ServicePriceView.as_view(), name='service-price'),
     path('api/psychologist/profile/faq/', FAQView.as_view(), name='faq'),
     path('api/psychologist/profile/documents/', DocumentView.as_view(), name='documents'),
 

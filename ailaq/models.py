@@ -1,15 +1,16 @@
-from django.utils.timezone import now, timedelta
-from ailaq.emails import send_approval_email, send_rejection_email
+from datetime import timedelta
+from django.utils.timezone import now
 from django.db.models import Avg
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 import random
-
 import logging
-
-from ailaq.enums import ClientGenderEnum, PsychologistAgeEnum, PsychologistGenderEnum, \
+from ailaq.emails import send_approval_email, send_rejection_email
+from ailaq.enums import (
+    ClientGenderEnum, PsychologistAgeEnum, PsychologistGenderEnum,
     CommunicationLanguageEnum, PreferredPsychologistGenderEnum, LanguageEnum
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,16 +19,14 @@ class CustomUserManager(BaseUserManager):
         if not email and not telegram_id:
             raise ValueError('Either Telegram ID or Email must be provided for registration.')
 
-        # Генерация уникального кода при создании пользователя
         verification_code = self.generate_unique_verification_code()
-
-        # Нормализация email
         email = self.normalize_email(email) if email else None
 
         user = self.model(
             email=email,
             telegram_id=telegram_id,
-            verification_code=verification_code,
+            verification_code=verification_code if not telegram_id else None,
+            verification_code_expiration=now() + timedelta(minutes=10) if not telegram_id else None,
             **extra_fields
         )
 
@@ -35,9 +34,8 @@ class CustomUserManager(BaseUserManager):
             user.set_password(password)
         user.save(using=self._db)
 
-        # Создаем профиль автоматически
-        if user.is_psychologist:
-            PsychologistProfile.objects.get_or_create(user=user)
+        if user.wants_to_be_psychologist:
+            PsychologistApplication.objects.get_or_create(user=user)
         else:
             ClientProfile.objects.get_or_create(user=user)
 
@@ -83,9 +81,6 @@ class CustomUser(AbstractBaseUser):
     def get_username(self):
         return self.email if self.email else f"tg_{self.telegram_id}"
 
-    def __str__(self):
-        return self.get_username()
-
     def generate_verification_code(self):
         """Генерация нового кода и обновление срока действия."""
         for _ in range(10):  # До 10 попыток генерации уникального кода
@@ -95,23 +90,6 @@ class CustomUser(AbstractBaseUser):
                 self.verification_code_expiration = now() + timedelta(minutes=10)  # Устанавливаем срок
                 self.save(update_fields=['verification_code', 'verification_code_expiration'])
                 return new_code
-        raise ValueError("Не удалось сгенерировать уникальный код подтверждения")
-
-    def generate_new_verification_code(self):
-        """
-        Генерирует новый уникальный код подтверждения (4 цифры).
-        Если сгенерированный код уже существует, метод делает до 10 попыток.
-        Код действителен 10 минут.
-        """
-        for _ in range(10):  # До 10 попыток генерации уникального кода
-            new_code = str(random.randint(1000, 9999))  # Генерируем 4-значный код
-            if not CustomUser.objects.filter(verification_code=new_code).exists():  # Проверяем уникальность
-                self.verification_code = new_code
-                self.verification_code_expiration = now() + timedelta(minutes=10)  # Устанавливаем срок действия
-                self.save(update_fields=['verification_code', 'verification_code_expiration'])  # Сохраняем изменения
-                return new_code
-
-        # Если после 10 попыток не удалось найти уникальный код, вызываем ошибку
         raise ValueError("Не удалось сгенерировать уникальный код подтверждения")
 
     def __str__(self):
@@ -126,7 +104,6 @@ class CustomUser(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return self.is_superuser
-
 
 class ClientProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='client_profile')
@@ -226,6 +203,7 @@ class EducationDocument(models.Model):
     document = models.FileField(upload_to='education_documents/')
     year = models.PositiveIntegerField(null=True, blank=True, help_text="Год получения документа")
     title = models.CharField(max_length=255, null=True, blank=True, help_text="Название документа")
+    file_signature = models.CharField(max_length=255, null=True, blank=True, help_text="Подпись к файлу")
 
     def __str__(self):
         return f"{self.year} - {self.title}"
@@ -473,6 +451,14 @@ class PsychologistProfile(models.Model):
         """ Возвращает количество отзывов для завершённых сессий психолога """
         return Review.objects.filter(session__psychologist=self, session__status='COMPLETED').count()
 
+    def update_catalog_visibility(self):
+        self.is_in_catalog = (
+            self.is_verified and
+            self.application and
+            self.application.purchased_applications >= 3
+        )
+        self.save()
+
 def get_default_cost():
     return settings.REQUEST_COST
 
@@ -551,5 +537,22 @@ class BuyRequest(models.Model):
     ]
     status = models.CharField(max_length=10, choices=status_choices, default='PENDING')
 
+
     def __str__(self):
         return f"BuyRequest from {self.client} to {self.psychologist}"
+
+    def accept(self):
+        if self.status != 'PENDING':
+            raise ValueError("Заявка уже обработана.")
+
+        self.status = 'ACCEPTED'
+        self.save()
+
+        # Получаем заявку психолога через профиль пользователя
+        if self.psychologist and self.psychologist.application:
+            application = self.psychologist.application
+            application.purchased_applications += 1
+            application.save(update_fields=['purchased_applications'])
+
+            # Обновляем видимость психолога в каталоге
+            self.psychologist.update_catalog_visibility()
