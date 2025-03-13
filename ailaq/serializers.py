@@ -10,7 +10,7 @@ import random
 import hmac
 import time
 from django.utils import timezone
-from datetime import datetime
+from datetime import datetime, date
 
 CustomUser = get_user_model()
 
@@ -20,7 +20,7 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['email', 'password', 'password_confirm', 'is_psychologist']
+        fields = ['email', 'password', 'password_confirm', 'wants_to_be_psychologist']  # Исправлено поле
 
     def validate(self, data):
         if data['password'] != data['password_confirm']:
@@ -132,32 +132,34 @@ class ReviewSerializer(serializers.ModelSerializer):
         ]
 
 class PsychologistProfileSerializer(serializers.ModelSerializer):
-    average_rating = serializers.SerializerMethodField()
-    reviews = serializers.SerializerMethodField()
-    catalog_description_ru = serializers.CharField(source='application.catalog_description_ru', read_only=True)
-    session_price = serializers.DecimalField(source='application.session_price', max_digits=10, decimal_places=2, read_only=True)
+    profile_id = serializers.IntegerField(source="id", read_only=True)  # ID профиля психолога
+    full_name = serializers.SerializerMethodField()
+    age = serializers.SerializerMethodField()
+    experience_years = serializers.IntegerField(source='application.experience_years', read_only=True)
+    country = serializers.CharField(source='application.service_countries', read_only=True)
+    city = serializers.CharField(source='application.service_cities', read_only=True)
+    about_me = serializers.CharField(source='application.about_me_ru', read_only=True)
+    qualification = serializers.CharField(source='application.qualification', read_only=True)
 
     class Meta:
         model = PsychologistProfile
-        fields = [
-            'id', 'user', 'catalog_description_ru', 'session_price',
-            'is_in_catalog', 'is_verified', 'requests_count', 'average_rating', 'reviews',
-        ]
+        fields = ['profile_id', 'full_name', 'age', 'qualification', 'experience_years', 'country', 'city', 'about_me']
 
-    def get_average_rating(self, obj):
-        return obj.get_average_rating()
+    def get_full_name(self, obj):
+        """Получает полное имя психолога"""
+        if obj.application:
+            first = obj.application.first_name_ru or ""
+            last = obj.application.last_name_ru or ""
+            return f"{first} {last}".strip() or obj.user.email
+        return obj.user.email
 
-    def get_reviews(self, obj):
-        reviews = Review.objects.filter(session__psychologist=obj)
-        return [
-            {
-                "id": review.id,
-                "rating": review.rating,
-                "text": review.text,
-                "created_at": review.created_at,
-            }
-            for review in reviews
-        ]
+    def get_age(self, obj):
+        """Вычисляет возраст психолога по дате рождения (если есть)"""
+        if obj.application and obj.application.birth_date:
+            today = date.today()
+            bd = obj.application.birth_date
+            return today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+        return None
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
     user = serializers.ReadOnlyField(source="user.email")
@@ -165,7 +167,7 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistApplication
         fields = [
-            'user', 'first_name_ru', 'last_name_ru', 'gender', 'qualification', 'is_verified', 'is_in_catalog', 'status'
+         'user', 'first_name_ru', 'last_name_ru', 'gender', 'qualification', 'is_verified', 'is_in_catalog', 'status'
         ]
         read_only_fields = ['user', 'status']
 
@@ -185,6 +187,7 @@ class TopicSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class CatalogSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
     first_name_ru = serializers.SerializerMethodField()
     last_name_ru = serializers.SerializerMethodField()
     middle_name_ru = serializers.SerializerMethodField()
@@ -198,7 +201,7 @@ class CatalogSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistProfile
         fields = [
-            'id',
+            'user_id',
             'first_name_ru',
             'last_name_ru',
             'middle_name_ru',
@@ -239,6 +242,7 @@ class CatalogSerializer(serializers.ModelSerializer):
     def get_reviews_count(self, obj) -> int | None:
         return obj.get_reviews_count()
 
+
 #для вьющек сериализаторы по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -259,6 +263,7 @@ class EducationDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = EducationDocument
         fields = ['document', 'year', 'title', 'file_signature']
+
 # Квалификация психолога
 class QualificationSerializer(serializers.ModelSerializer):
     office_photo = serializers.ImageField(required=False, allow_null=True)
@@ -358,17 +363,32 @@ class BuyRequestSerializer(serializers.ModelSerializer):
 class EmptySerializer(serializers.Serializer):
     pass
 
+class SessionSerializer(serializers.ModelSerializer):
+    psychologist_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Session
+        fields = ['id', 'psychologist_name', 'start_time', 'status']
+
+    def get_psychologist_name(self, obj):
+        """ Получает имя психолога из `PsychologistApplication` """
+        if obj.psychologist and hasattr(obj.psychologist, 'application'):
+            application = obj.psychologist.application
+            full_name = f"{application.first_name_ru or ''} {application.last_name_ru or ''}".strip()
+            return full_name if full_name else "Неизвестный психолог"
+        return "Неизвестный психолог"
+
 class SessionCreateSerializer(serializers.ModelSerializer):
     """
     Сериализатор для создания записи на сессию.
     Пользователь передаёт день/месяц/год/часы/минуты,
     а в create() мы собираем это в один DateTimeField (start_time).
     """
-    day = serializers.IntegerField(min_value=1, max_value=31, required=True)
-    month = serializers.IntegerField(min_value=1, max_value=12, required=True)
-    year = serializers.IntegerField(min_value=2023, max_value=2100, required=True)
-    hour = serializers.IntegerField(min_value=0, max_value=23, required=True)
-    minute = serializers.IntegerField(min_value=0, max_value=59, required=True)
+    day = serializers.IntegerField(min_value=1, max_value=31, required=True, write_only=True)
+    month = serializers.IntegerField(min_value=1, max_value=12, required=True, write_only=True)
+    year = serializers.IntegerField(min_value=2023, max_value=2100, required=True, write_only=True)
+    hour = serializers.IntegerField(min_value=0, max_value=23, required=True, write_only=True)
+    minute = serializers.IntegerField(min_value=0, max_value=59, required=True, write_only=True)
 
     class Meta:
         model = Session

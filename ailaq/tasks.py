@@ -8,16 +8,18 @@ from django.core.mail import send_mail
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
-@shared_task
-def send_email_async(subject, message, recipient_list):
+
+@shared_task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 60})
+def send_email_async(self, subject, message, recipient_list):
     """
-    Асинхронная отправка письма через Celery.
+    Асинхронная отправка email через Celery.
     """
     try:
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, recipient_list)
-        logger.info(f"Email sent to {', '.join(recipient_list)} (async)")
+        logger.info(f" Email sent to {', '.join(recipient_list)} (async)")
     except Exception as e:
-        logger.error(f"Error sending async email to {', '.join(recipient_list)}: {str(e)}")
+        logger.error(f" Error sending async email to {', '.join(recipient_list)}: {str(e)}")
+        raise self.retry(exc=e)
 
 def check_psychologist_level(user):
     """ Проверка уровня психолога на основе количества просроченных заявок. """
@@ -33,7 +35,6 @@ def check_psychologist_level(user):
 
     profile.level = new_level
     profile.save()
-
 
 def check_and_update_applications():
     """ Проверка просроченных заявок. """

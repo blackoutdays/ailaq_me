@@ -1,15 +1,17 @@
 #views
 import time
 import hmac
+from datetime import datetime
 from asgiref.sync import async_to_sync
 from django.http.multipartparser import MultiPartParser
-from django.utils.timezone import now
+from django.utils.timezone import now, make_aware
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
 from hashlib import sha256
 from rest_framework import status, viewsets
+from ailaq.tasks import send_email_async
 from rest_framework.generics import GenericAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.views import APIView
@@ -25,7 +27,7 @@ from .serializers import (
     LoginSerializer, PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
     PersonalInfoSerializer, QualificationSerializer, DocumentSerializer,
     FAQListSerializer, TopicSerializer, QuickClientConsultationRequestSerializer, TelegramAuthSerializer,
-    ServicePriceSerializer, EmptySerializer, SessionCreateSerializer
+    ServicePriceSerializer, EmptySerializer, SessionCreateSerializer, SessionSerializer, PsychologistProfileSerializer
 )
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
@@ -75,7 +77,7 @@ class RegisterUserView(APIView):
                 {
                     "access_token": str(refresh.access_token),
                     "refresh_token": str(refresh),
-                    "role": "психолог" if user.is_psychologist else "клиент"
+                    "role": "психолог" if user.wants_to_be_psychologist else "клиент"
                 },
                 status=status.HTTP_201_CREATED,
             )
@@ -203,7 +205,6 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
     queryset = ClientProfile.objects.all()
     serializer_class = ClientProfileSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = (MultiPartParser, FormParser)  # Добавить это
 
     def get_queryset(self):
         """Возвращает профиль только текущего пользователя."""
@@ -216,12 +217,11 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
     )
     def list(self, request, *args, **kwargs):
         """Возвращает профиль текущего аутентифицированного клиента."""
-        try:
-            profile = ClientProfile.objects.get(user=request.user)
+        profile = self.get_queryset().first()
+        if profile:
             serializer = self.get_serializer(profile)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        except ClientProfile.DoesNotExist:
-            return Response({"detail": "Профиль клиента не найден."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Профиль клиента не найден."}, status=status.HTTP_404_NOT_FOUND)
 
     @extend_schema(
         description="Создать или обновить профиль клиента.",
@@ -245,15 +245,15 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
     )
     def partial_update(self, request, *args, **kwargs):
         """Обновляет профиль текущего клиента."""
-        try:
-            profile = ClientProfile.objects.get(user=request.user)
-            serializer = self.get_serializer(profile, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except ClientProfile.DoesNotExist:
-            return Response({"detail": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+        profile = self.get_queryset().first()
+        if not profile:
+            return Response({"detail": "Профиль клиента не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         description="Удалить профиль клиента.",
@@ -261,12 +261,126 @@ class ClientProfileViewSet(viewsets.ModelViewSet):
     )
     def destroy(self, request, *args, **kwargs):
         """Удаляет профиль текущего клиента."""
-        try:
-            profile = ClientProfile.objects.get(user=request.user)
-            profile.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except ClientProfile.DoesNotExist:
+        profile = self.get_queryset().first()
+        if not profile:
             return Response({"detail": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+        profile.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class PublicPsychologistProfileView(APIView):
+    """
+    🔹 Публичный API для получения профиля психолога (для клиентов)
+    """
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Публичный профиль психолога"],
+        description="Этот эндпоинт позволяет клиенту получить информацию о психологе по его ID.",
+        responses={200: PsychologistProfileSerializer}
+    )
+    def get(self, request, psychologist_id: int):
+        psychologist = get_object_or_404(PsychologistProfile, user_id=psychologist_id)
+        serializer = PsychologistProfileSerializer(psychologist)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class PublicQualificationView(APIView):
+    """
+    🔹 Позволяет всем пользователям (и клиентам) получать квалификацию психолога.
+    """
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Публичный профиль психолога"],
+        summary="Получить публичную квалификацию психолога",
+        responses={200: QualificationSerializer}
+    )
+    def get(self, request, psychologist_id: int):
+        application = get_object_or_404(PsychologistApplication, user_id=psychologist_id)
+        serializer = QualificationSerializer(application)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class PublicServicePriceView(APIView):
+    """
+    🔹 Позволяет всем пользователям видеть стоимость услуг психолога.
+    """
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Публичный профиль психолога"],
+        summary="Получить стоимость услуг психолога",
+        responses={200: ServicePriceSerializer}
+    )
+    def get(self, request, psychologist_id: int):
+        application = get_object_or_404(PsychologistApplication, user_id=psychologist_id)
+        serializer = ServicePriceSerializer(application)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class PublicReviewListView(APIView):
+    """
+    🔹 Клиенты могут просматривать отзывы о психологе с пагинацией.
+    """
+    permission_classes = [AllowAny]  # Доступ для всех клиентов
+    pagination_class = PageNumberPagination  # Используем стандартную пагинацию
+
+    @extend_schema(
+        tags=["Публичный профиль психолога"],
+        summary="Получить список отзывов о психологе",
+        responses={200: ReviewSerializer(many=True)}
+    )
+    def get(self, request, psychologist_id: int):
+        psychologist = get_object_or_404(PsychologistProfile, user_id=psychologist_id)
+        reviews = Review.objects.filter(psychologist=psychologist).order_by("-created_at")
+
+        # Используем встроенную пагинацию APIView
+        paginator = self.pagination_class()
+        paginated_reviews = paginator.paginate_queryset(reviews, request, view=self)
+
+        if paginated_reviews is not None:
+            serializer = ReviewSerializer(paginated_reviews, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        # Если пагинация не требуется, вернуть просто список отзывов
+        serializer = ReviewSerializer(reviews, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class PublicFAQView(APIView):
+    """
+    🔹 Клиенты могут просматривать FAQ психолога.
+    """
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Публичный профиль психолога"],
+        summary="Получить список FAQ психолога",
+        responses={200: FAQListSerializer}
+    )
+    def get(self, request, psychologist_id: int):
+        application = get_object_or_404(PsychologistApplication, user_id=psychologist_id)
+        faqs = application.faqs.all()
+        serializer = FAQListSerializer({"faqs": faqs})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+# Получение профиля психолога
+
+class PsychologistSelfProfileView(APIView):
+    """
+    🔹 API для получения и редактирования личного профиля психолога
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Психолог"],
+        description="Возвращает профиль текущего авторизованного психолога.",
+        responses={200: PsychologistProfileSerializer}
+    )
+    def get(self, request):
+        try:
+            psychologist_profile = request.user.psychologist_profile
+        except PsychologistProfile.DoesNotExist:
+            return Response({"error": "Вы не зарегистрированы как психолог."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = PsychologistProfileSerializer(psychologist_profile)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 # Получение полного профиля психолога
 class PsychologistProfileView(APIView):
@@ -309,7 +423,7 @@ class PsychologistProfileView(APIView):
             return Response({"error": "Не удалось получить профиль психолога."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Сохранение и получение личной информации
+# Сохранение и получение личной информации психолога
 class PersonalInfoView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -618,6 +732,46 @@ class ReviewCreateView(APIView):
 
         return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
 
+class PsychologistSessionView(APIView):
+    """
+    🔹 Психолог может видеть список всех записей клиентов к нему.
+    """
+    permission_classes = [IsAuthenticated]
+
+    class CustomPagination(PageNumberPagination):
+        page_size = 10  # Устанавливаем размер страницы
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Получить список записей клиентов к психологу",
+        description="Позволяет психологу увидеть всех клиентов, которые записались к нему, включая дату, время и статус сеанса.",
+        responses={
+            200: OpenApiResponse(response=SessionSerializer(many=True), description="Список записей клиентов"),
+            403: OpenApiResponse(description="Вы не зарегистрированы как психолог."),
+        },
+    )
+    def get(self, request):
+        """
+        🔹 Получение всех записей клиентов к текущему психологу с пагинацией.
+        """
+        try:
+            psychologist_profile = request.user.psychologist_profile
+        except PsychologistProfile.DoesNotExist:
+            return Response(
+                {"error": "Вы не зарегистрированы как психолог."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Получаем все сессии, где психолог - текущий пользователь
+        sessions = Session.objects.filter(psychologist=psychologist_profile).order_by('start_time')
+
+        # Применяем пагинацию
+        paginator = self.CustomPagination()
+        paginated_sessions = paginator.paginate_queryset(sessions, request, view=self)
+        serializer = SessionSerializer(paginated_sessions, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
+
 #TELEGRAM LOGIC
 class LinkTelegramView(GenericAPIView):
     serializer_class = TelegramAuthSerializer
@@ -865,30 +1019,27 @@ class TopicListView(APIView):
 class ScheduleSessionView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(
-        tags=["Сеансы"],
-        summary="Записаться на сеанс к психологу (с указанием даты/времени)",
-        description="""
-        Клиент создаёт запись (Session со статусом SCHEDULED), 
-        передавая день/месяц/год/часы/минуты.
-        Оповещения (telegram/email) идут клиенту и психологу.
-        """,
-        request=SessionCreateSerializer,
-        responses={201: SessionCreateSerializer}
-    )
+    def get(self, request):
+        """
+        🔹 Получение всех записей клиента
+        """
+        try:
+            client_profile = request.user.client_profile
+        except ClientProfile.DoesNotExist:
+            logger.error(f"ScheduleSessionView: User {request.user.id} is not a client.")
+            return Response(
+                {"error": "Только клиент может просматривать свои записи."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        sessions = Session.objects.filter(client=client_profile).order_by('start_time')
+        serializer = SessionSerializer(sessions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def post(self, request):
         """
-        Пример JSON:
-        {
-          "psychologist": 6,    // <-- теперь это user.id психолога
-          "day": 1,
-          "month": 7,
-          "year": 2025,
-          "hour": 14,
-          "minute": 30
-        }
+        🔹 Запись клиента на сеанс
         """
-        # 1) Проверяем, что вызывающий пользователь — клиент
         try:
             client_profile = request.user.client_profile
         except ClientProfile.DoesNotExist:
@@ -898,52 +1049,84 @@ class ScheduleSessionView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Сериализатору нужно поле 'client', поэтому добавляем
         data = request.data.copy()
+        psychologist_id = data.get("psychologist")
 
-        # 2) Получаем ID психолога, который пришёл в теле запроса
-        psychologist_id = data.get('psychologist')
         if not psychologist_id:
             return Response({"error": "Параметр 'psychologist' (ID) обязателен."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # 2а) Ищем профиль психолога (где pk=User.id)
         psychologist_profile = get_object_or_404(PsychologistProfile, pk=psychologist_id)
 
-        # Дополнительные проверки:
-        # 2б) Проверяем, действительно ли user является психологом
         if not psychologist_profile.user.is_psychologist:
             return Response({"error": "Данный пользователь не является психологом."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # 2в) Проверяем, верифицирован ли психолог
         if not psychologist_profile.is_verified:
             return Response({"error": "Психолог не верифицирован."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # 2г) Проверяем, есть ли у него купленная заявка
-        application = psychologist_profile.application
-        if not application or application.purchased_applications < 1:
-            return Response({"error": "У психолога нет активных (купленных) заявок."},
+        # Парсим дату и время
+        try:
+            session_time = make_aware(datetime(
+                int(data["year"]), int(data["month"]), int(data["day"]),
+                int(data["hour"]), int(data["minute"])
+            ))
+        except (ValueError, KeyError):
+            return Response({"error": "Некорректные данные даты или времени."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # 3) Валидируем данные (SessionCreateSerializer)
+        # Проверка на занятость времени
+        existing_session = Session.objects.filter(
+            psychologist=psychologist_profile,
+            start_time=session_time,
+            status__in=["scheduled", "in_progress"]
+        ).exists()
+
+        if existing_session:
+            return Response({"error": "Это время уже занято у психолога."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Создание записи
         serializer = SessionCreateSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             session_obj = serializer.save()
             logger.info(f"Session #{session_obj.id} created (client {client_profile.pk}, psych {psychologist_id}).")
 
-            # 4) Отправляем уведомления
             self.notify_client(client_profile, session_obj)
             self.notify_psychologist(psychologist_profile, session_obj)
 
-            return Response(SessionCreateSerializer(session_obj).data,
-                            status=status.HTTP_201_CREATED)
+            return Response(SessionCreateSerializer(session_obj).data, status=status.HTTP_201_CREATED)
 
         logger.error(f"SessionCreateSerializer invalid: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def delete(self, request, session_id):
+        """
+        🔹 Клиент может отменить свою запись
+        """
+        try:
+            client_profile = request.user.client_profile
+        except ClientProfile.DoesNotExist:
+            return Response({"error": "Только клиент может отменять свои записи."},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        session = get_object_or_404(Session, id=session_id, client=client_profile)
+
+        if session.status not in ["scheduled", "pending"]:
+            return Response({"error": "Нельзя отменить сеанс, который уже прошел или находится в процессе."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        session.status = "canceled"
+        session.save()
+
+        # Уведомляем клиента
+        self.notify_cancellation(client_profile, session)
+
+        return Response({"message": "Запись отменена."}, status=status.HTTP_200_OK)
+
     def notify_client(self, client_profile, session_obj):
+        """🔹 Уведомление клиента через Telegram и Email"""
         telegram_id = getattr(client_profile.user, 'telegram_id', None)
         if telegram_id:
             try:
@@ -963,9 +1146,10 @@ class ScheduleSessionView(APIView):
                 f"Статус: {session_obj.status}\n\n"
                 "С уважением,\nВаша компания."
             )
-            send_email(to=email, subject=subject, body=body)
+            send_email_async.delay(subject, body, [email])
 
     def notify_psychologist(self, psychologist_profile, session_obj):
+        """🔹 Уведомление психолога через Telegram и Email"""
         telegram_id = getattr(psychologist_profile.user, 'telegram_id', None)
         if telegram_id:
             try:
@@ -990,4 +1174,28 @@ class ScheduleSessionView(APIView):
                 f"Статус: {session_obj.status}\n\n"
                 "С уважением,\nВаша компания."
             )
-            send_email(to=email, subject=subject, body=body)
+            send_email_async.delay(subject, body, [email])
+
+    def notify_cancellation(self, client_profile, session_obj):
+        """🔹 Уведомление клиента об отмене записи"""
+        telegram_id = getattr(client_profile.user, 'telegram_id', None)
+        if telegram_id:
+            try:
+                bot.send_message(
+                    chat_id=telegram_id,
+                    text=f"Ваша запись #{session_obj.id} отменена."
+                )
+            except Exception as e:
+                logger.error(f"Ошибка при отправке уведомления клиенту в Telegram: {str(e)}")
+
+        email = client_profile.user.email
+        if email:
+            subject = "Отмена записи"
+            body = (
+                f"Ваша запись #{session_obj.id} отменена.\n"
+                f"Дата/время: {session_obj.start_time}\n"
+                f"Статус: отменена.\n\n"
+                "С уважением,\nВаша компания."
+            )
+            send_email_async.delay(subject, body, [email])
+

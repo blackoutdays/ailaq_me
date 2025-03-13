@@ -11,3 +11,6 @@ Pillow==11.1.0
 django-filter>=2.4
 django-environ
 psycopg2-binary
+celery==5.3.4
+redis==5.0.1
+kombu==5.3.2

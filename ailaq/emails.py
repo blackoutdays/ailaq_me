@@ -5,18 +5,19 @@ logger = logging.getLogger(__name__)
 
 def send_email(subject, message, recipient_list):
     """
-    Обёртка, вызывающая Celery-задачу, чтобы отправить письмо асинхронно.
+    Запускает отправку email через Celery.
     """
     if not recipient_list:
-        logger.warning("send_email called with empty recipient_list.")
+        logger.warning("⚠️ send_email called with empty recipient_list.")
         return
     try:
         send_email_async.delay(subject, message, recipient_list)
-        logger.info(f"send_email scheduled Celery task for {', '.join(recipient_list)}")
+        logger.info(f" send_email scheduled Celery task for {', '.join(recipient_list)}")
     except Exception as e:
-        logger.error(f"Failed to schedule send_email_async: {str(e)}")
+        logger.error(f" Failed to schedule send_email_async: {str(e)}")
 
 def send_approval_email(application):
+    """ Отправляет email об одобрении заявки психолога. """
     subject = "Your Psychologist Application Status"
     message = (
         f"Dear {application.user.email},\n\n"
@@ -26,6 +27,7 @@ def send_approval_email(application):
     send_email(subject, message, [application.user.email])
 
 def send_rejection_email(application):
+    """ Отправляет email об отклонении заявки психолога. """
     subject = "Your Psychologist Application Status"
     message = (
         f"Dear {application.user.email},\n\n"
@@ -35,6 +37,7 @@ def send_rejection_email(application):
     send_email(subject, message, [application.user.email])
 
 def send_documents_request_email(application):
+    """ Отправляет email с просьбой загрузить недостающие документы. """
     subject = "Documents Missing - Please Add Required Documents"
     message = (
         f"Dear {application.user.email},\n\n"

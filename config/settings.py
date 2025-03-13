@@ -131,12 +131,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # EMAIL SETTINGS
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='aruka.larksss@gmail.com')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='taee xbjt arjo zjch')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='aruka.larksss@gmail.com')
+EMAIL_HOST = 'mail.ailaq.me'
+EMAIL_PORT = 465
+EMAIL_USE_TLS = False
+EMAIL_USE_SSL = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'info@ailaq.me')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = 'info@ailaq.me'
 
 LOGGING = {
     'version': 1,
@@ -192,5 +193,5 @@ TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN', default='7591573688:AAFtWbtZ4v5Uc
 AUTH_USER_MODEL = 'ailaq.CustomUser'
 
 REQUEST_COST = env.float('REQUEST_COST', default=10.00)
-ADMIN_EMAIL = env('ADMIN_EMAIL', default='aruka.larksss@gmail.com')
+ADMIN_EMAIL = env('ADMIN_EMAIL', default='info@ailaq.me')
 DEFAULT_CATALOG_REQUESTS_THRESHOLD = env.int('DEFAULT_CATALOG_REQUESTS_THRESHOLD', default=3)

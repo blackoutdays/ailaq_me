@@ -108,7 +108,7 @@ class ClientProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        primary_key=True,  # <-- primary_key=True
+        primary_key=True,
         related_name='client_profile'
     )
 

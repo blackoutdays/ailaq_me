@@ -10,7 +10,9 @@ from ailaq.views import (
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
     ReviewListView, TelegramAuthView, LinkTelegramView, VerificationCodeView,
     NewVerificationCodeView, QuickClientConsultationAPIView, CatalogViewSet,
-    ClientProfileViewSet, ServicePriceView, ScheduleSessionView
+    ClientProfileViewSet, ServicePriceView, ScheduleSessionView, PublicPsychologistProfileView,
+    PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
+    PsychologistSessionView
 )
 
 router = DefaultRouter()
@@ -32,13 +34,23 @@ urlpatterns = [
     path('api/register/', RegisterUserView.as_view(), name='register'),
     path('api/login/', LoginView.as_view(), name='login'),
 
+# Публичные эндпоинты для клиентов
+    path('api/psychologists/<int:psychologist_id>/qualification/', PublicQualificationView.as_view(), name='public-qualification'),
+    path('api/psychologists/<int:psychologist_id>/service_price/', PublicServicePriceView.as_view(), name='public-service-price'),
+    path('api/psychologists/<int:psychologist_id>/reviews/', PublicReviewListView.as_view(), name='public-reviews'),
+    path('api/psychologists/<int:psychologist_id>/faq/', PublicFAQView.as_view(), name='public-faq'),
+    path('api/psychologists/<int:psychologist_id>/profile/', PublicPsychologistProfileView.as_view(),
+       name='public-psychologist-profile'),
+
     # Психологи (Профиль, Обновление)
+    path('api/psychologists/me/profile/', PsychologistSelfProfileView.as_view(), name='psychologist-self-profile'),
     path('api/psychologist/profile/', PsychologistProfileView.as_view(), name='psychologist-profile'),
     path('api/psychologist/profile/personal-info/', PersonalInfoView.as_view(), name='personal-info'),
     path('api/psychologist/profile/qualification/', QualificationView.as_view(), name='qualification'),
     path('api/psychologist/profile/service_price/', ServicePriceView.as_view(), name='service-price'),
     path('api/psychologist/profile/faq/', FAQView.as_view(), name='faq'),
     path('api/psychologist/profile/documents/', DocumentView.as_view(), name='documents'),
+    path('api/psychologist/sessions/', PsychologistSessionView.as_view(), name='psychologist-sessions'),
 
     # Каталог и одобрение психологов
     path('api/admin/approve-psychologist/<int:psychologist_id>/', AdminApprovePsychologistView.as_view(), name='admin_approve_psychologist'),
@@ -60,6 +72,7 @@ urlpatterns = [
 
     # Запись на сеанс
     path('api/sessions/schedule/', ScheduleSessionView.as_view(), name='schedule-session'),
+    path('sessions/schedule/<int:session_id>/', ScheduleSessionView.as_view(), name='cancel_session'),
 
     path('api/', include(router.urls)),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
