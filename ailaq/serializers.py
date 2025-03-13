@@ -1,8 +1,10 @@
+from typing import Optional
+
+import serializers
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
     Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument, Session
-from django.conf import settings
 from hashlib import sha256
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
@@ -11,6 +13,8 @@ import hmac
 import time
 from django.utils import timezone
 from datetime import datetime, date
+
+from config import settings
 
 CustomUser = get_user_model()
 
@@ -215,31 +219,31 @@ class CatalogSerializer(serializers.ModelSerializer):
             'reviews_count',
         ]
 
-    def get_first_name_ru(self, obj) -> str | None:
+    def get_first_name_ru(self, obj) -> Optional[str]:
         return getattr(obj.application, 'first_name_ru', None)
 
-    def get_last_name_ru(self, obj) -> str | None:
+    def get_last_name_ru(self, obj) -> Optional[str]:
         return getattr(obj.application, 'last_name_ru', None)
 
-    def get_middle_name_ru(self, obj) -> str | None:
+    def get_middle_name_ru(self, obj) -> Optional[str]:
         return getattr(obj.application, 'middle_name_ru', None)
 
-    def get_qualification(self, obj) -> str | None:
+    def get_qualification(self, obj) -> Optional[str]:
         return getattr(obj.application, 'qualification', None)
 
-    def get_academic_degree(self, obj) -> str | None:
+    def get_academic_degree(self, obj) -> Optional[str]:
         return getattr(obj.application, 'academic_degree', None)
 
-    def get_catalog_description_ru(self, obj) -> str | None:
+    def get_catalog_description_ru(self, obj) -> Optional[str]:
         return getattr(obj.application, 'catalog_description_ru', None)
 
-    def get_session_price(self, obj) -> float | None:
+    def get_session_price(self, obj) -> Optional[float]:
         return getattr(obj.application, 'session_price', None)
 
-    def get_average_rating(self, obj) -> float | None:
+    def get_average_rating(self, obj) -> Optional[float]:
         return obj.get_average_rating()
 
-    def get_reviews_count(self, obj) -> int | None:
+    def get_reviews_count(self, obj) -> Optional[int]:
         return obj.get_reviews_count()
 
 
