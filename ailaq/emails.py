@@ -8,7 +8,7 @@ def send_email(subject, message, recipient_list):
     Запускает отправку email через Celery.
     """
     if not recipient_list:
-        logger.warning("⚠️ send_email called with empty recipient_list.")
+        logger.warning("send_email called with empty recipient_list.")
         return
     try:
         send_email_async.delay(subject, message, recipient_list)

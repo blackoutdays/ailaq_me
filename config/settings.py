@@ -92,7 +92,7 @@ DATABASES = {
         'NAME': env('POSTGRES_DB', default='ailaq'),
         'USER': env('POSTGRES_USER', default='aruka'),
         'PASSWORD': env('POSTGRES_PASSWORD', default='aruka'),
-        'HOST': env('POSTGRES_HOST', default='db'),
+        'HOST': env('POSTGRES_HOST', default='localhost'),
         'PORT': env('POSTGRES_PORT', default='5432'),
     }
 }
@@ -130,14 +130,14 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # EMAIL SETTINGS
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'mail.ailaq.me'
-EMAIL_PORT = 465
-EMAIL_USE_TLS = False
-EMAIL_USE_SSL = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'info@ailaq.me')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = 'info@ailaq.me'
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'mail.ailaq.me'
+# EMAIL_PORT = 465
+# EMAIL_USE_TLS = False
+# EMAIL_USE_SSL = True
+# EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'info@ailaq.me')
+# EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+# DEFAULT_FROM_EMAIL = 'info@ailaq.me'
 
 LOGGING = {
     'version': 1,

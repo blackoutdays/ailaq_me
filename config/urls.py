@@ -8,8 +8,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from ailaq.views import (
     LoginView, RegisterUserView, AdminApprovePsychologistView, PsychologistProfileView,
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
-    ReviewListView, TelegramAuthView, LinkTelegramView, VerificationCodeView,
-    NewVerificationCodeView, QuickClientConsultationAPIView, CatalogViewSet,
+    ReviewListView, TelegramAuthView, VerifyTelegramView, QuickClientConsultationAPIView, CatalogViewSet,
     ClientProfileViewSet, ServicePriceView, ScheduleSessionView, PublicPsychologistProfileView,
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
     PsychologistSessionView
@@ -61,11 +60,7 @@ urlpatterns = [
 
     # Telegram API (Привязка и аутентификация)
     path('api/auth/telegram/', TelegramAuthView.as_view(), name='telegram_auth'),
-    path('api/link-telegram/', LinkTelegramView.as_view(), name='link_telegram'),
-
-    # Верификационный код
-    path('api/verification-code/', VerificationCodeView.as_view(), name='verification_code'),
-    path('api/new-verification-code/', NewVerificationCodeView.as_view(), name='new_verification_code'),
+    path('api/verify-telegram/', VerifyTelegramView.as_view(), name='link_telegram'),
 
     # Быстрая консультация (Telegram)
     path('api/quick-consultation/', QuickClientConsultationAPIView.as_view(), name='quick_consultation_api'),

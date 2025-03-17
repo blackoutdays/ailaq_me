@@ -1,5 +1,5 @@
 from typing import Optional
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
     Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument, Session
@@ -8,8 +8,12 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 import random
 import hmac
+from .tasks import send_email_async
 import time
 from django.utils import timezone
+from datetime import timedelta
+from django.utils.crypto import get_random_string
+from django.utils.timezone import now
 from datetime import datetime, date
 
 from config import settings
@@ -49,18 +53,75 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
 
         return user
 
+class RegisterSerializer(serializers.ModelSerializer):
+    """
+    Сериализатор для регистрации пользователей (клиентов и психологов).
+    """
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password_confirm = serializers.CharField(write_only=True, required=True)
+    is_psychologist = serializers.BooleanField(default=False)
+
+    class Meta:
+        model = CustomUser
+        fields = ['email', 'password', 'password_confirm', 'is_psychologist']
+
+    def validate(self, attrs):
+        """ Проверяем совпадение паролей """
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError({"password_confirm": "Пароли не совпадают."})
+        return attrs
+
+    def create(self, validated_data):
+        """ Создает нового пользователя """
+        validated_data.pop('password_confirm')  # Убираем повтор пароля
+        is_psychologist = validated_data.pop("is_psychologist")
+
+        user = CustomUser.objects.create(
+            email=validated_data['email'],
+            is_psychologist=is_psychologist
+        )
+        user.set_password(validated_data['password'])
+        user.is_active = False  # Email должен быть подтвержден
+        user.save()
+
+        return user
+
 class LoginSerializer(serializers.Serializer):
+    """
+    Сериализатор для входа пользователя (клиент или психолог).
+    """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
-    def validate(self, data):
-        if not data.get("email") or not data.get("password"):
-            raise serializers.ValidationError("Email и пароль обязательны.")
-        return data
+    def validate(self, attrs):
+        """ Проверяем email и пароль """
+        email = attrs.get("email")
+        password = attrs.get("password")
+
+        user = authenticate(email=email, password=password)
+        if not user:
+            raise serializers.ValidationError({"error": "Неверные учетные данные."})
+
+        if not user.is_active:
+            raise serializers.ValidationError({"error": "Ваш email не подтвержден."})
+
+        attrs["user"] = user
+        return attrs
+
+# class LoginSerializer(serializers.Serializer):
+#     email = serializers.EmailField()
+#     password = serializers.CharField(write_only=True)
+#
+#     def validate(self, data):
+#         if not data.get("email") or not data.get("password"):
+#             raise serializers.ValidationError("Email и пароль обязательны.")
+#         return data
 
 # Профиль клиента
 class ClientProfileSerializer(serializers.ModelSerializer):
-    email = serializers.SerializerMethodField()
+    email = serializers.EmailField(required=False)
+    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
 
     class Meta:
         model = ClientProfile
@@ -73,10 +134,41 @@ class ClientProfileSerializer(serializers.ModelSerializer):
             'city',
             'profile_image',
             'email',
+            'password',
+            'confirm_password',
         ]
 
-    def get_email(self, obj) -> str:
-        return obj.user.email if obj.user and obj.user.email else ""
+    def validate(self, data):
+        """ Проверяем, что если вводится пароль, то он должен совпадать с confirm_password. """
+        if "password" in data or "confirm_password" in data:
+            if data.get("password") != data.get("confirm_password"):
+                raise serializers.ValidationError({"password": "Пароли не совпадают."})
+        return data
+
+    def update(self, instance, validated_data):
+        """
+        Если введен email, он сохраняется в `CustomUser` и требует подтверждения.
+        Если введен пароль, он сохраняется в `CustomUser`.
+        """
+        user = instance.user
+        email = validated_data.pop("email", None)
+        password = validated_data.pop("password", None)
+
+        if email and not user.email:
+            user.email = email
+            user.is_active = False  # Требуем подтверждение email
+            user.verification_code = get_random_string(length=32)
+            user.verification_code_expiration = now() + timedelta(hours=24)
+            user.save()
+
+            confirmation_link = f"https://your-platform.com/confirm-email/{user.verification_code}"
+            send_email_async.delay("Подтверждение email", f"Подтвердите email: {confirmation_link}", [user.email])
+
+        if password:
+            user.set_password(password)
+            user.save()
+
+        return super().update(instance, validated_data)
 
 
 class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):

@@ -4,6 +4,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 import django
 django.setup()
 import aiohttp
+import asyncio
 from django.contrib.auth import get_user_model
 from config import settings
 import nest_asyncio
@@ -75,6 +76,10 @@ async def get_psychologist_profile(telegram_id):
 async def get_client_profile(telegram_id):
     return await sync_to_async(ClientProfile.objects.get)(telegram_id=telegram_id)
 
+
+async def send_welcome_message(telegram_id):
+    await bot.send_message(telegram_id, "👋 Привет! Теперь я могу писать вам первым.")
+asyncio.run(send_welcome_message(telegram_id))
 
 async def schedule_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Введите ID психолога для назначения сессии.")

@@ -1,4 +1,6 @@
 from datetime import timedelta
+
+from django.utils.crypto import get_random_string
 from django.utils.timezone import now
 from django.db.models import Avg
 from django.conf import settings
@@ -15,28 +17,22 @@ logger = logging.getLogger(__name__)
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email=None, password=None, telegram_id=None, **extra_fields):
+        """Создаёт нового пользователя (email или Telegram)"""
         if not email and not telegram_id:
-            raise ValueError('Either Telegram ID or Email must be provided for registration.')
+            raise ValueError('Необходимо указать email или Telegram ID')
 
-        verification_code = self.generate_unique_verification_code()
         email = self.normalize_email(email) if email else None
 
         user = self.model(
             email=email,
             telegram_id=telegram_id,
-            verification_code=verification_code if not telegram_id else None,
-            verification_code_expiration=now() + timedelta(minutes=10) if not telegram_id else None,
+            is_active=False,  # Пользователь должен подтвердить email
             **extra_fields
         )
 
         if password:
             user.set_password(password)
         user.save(using=self._db)
-
-        if user.wants_to_be_psychologist:
-            PsychologistApplication.objects.get_or_create(user=user)
-        else:
-            ClientProfile.objects.get_or_create(user=user)
 
         return user
 
@@ -51,26 +47,22 @@ class CustomUserManager(BaseUserManager):
 
         return self.create_user(email=email, password=password, **extra_fields)
 
-    @staticmethod
-    def generate_unique_verification_code():
-        for _ in range(10):  # Попытки до 10 раз
-            code = str(random.randint(1000, 9999))
-            if not CustomUser.objects.filter(verification_code=code).exists():
-                return code
-        raise ValueError("Could not generate a unique verification code")
 
 class CustomUser(AbstractBaseUser):
-    telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID", editable=False)
+    """Кастомная модель пользователя с подтверждением email"""
+    telegram_id = models.BigIntegerField(null=True, blank=True, unique=True, verbose_name="Telegram ID", editable=False)
     email = models.EmailField(unique=True, null=True, blank=True)
-    verification_code = models.CharField(max_length=4, unique=True, null=True, blank=True)
-    verification_code_expiration = models.DateTimeField(null=True, blank=True)  # Дата истечения
 
-    is_psychologist = models.BooleanField(default=False)
-    wants_to_be_psychologist = models.BooleanField(default=False)
+    verification_code = models.CharField(max_length=64, unique=True, null=True, blank=True)  # Токен для подтверждения
+    verification_code_expiration = models.DateTimeField(null=True, blank=True)  # Срок действия кода
 
-    is_staff = models.BooleanField(default=False)
-    is_superuser = models.BooleanField(default=False)
-    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_psychologist = models.BooleanField(default=False)  # Является ли психологом
+    wants_to_be_psychologist = models.BooleanField(default=False)  # Хочет стать психологом
+
+    is_staff = models.BooleanField(default=False)  # Доступ в админку
+    is_superuser = models.BooleanField(default=False)  # Полный доступ
+
+    is_active = models.BooleanField(default=False)  # Неактивен, пока не подтвердит email
 
     objects = CustomUserManager()
 
@@ -78,24 +70,29 @@ class CustomUser(AbstractBaseUser):
     REQUIRED_FIELDS = []
 
     def get_username(self):
+        """Получение имени пользователя (email или Telegram ID)"""
         return self.email if self.email else f"tg_{self.telegram_id}"
 
     def generate_verification_code(self):
-        """Генерация нового кода и обновление срока действия."""
-        for _ in range(10):  # До 10 попыток генерации уникального кода
-            new_code = str(random.randint(1000, 9999))  # 4-значный код
-            if not CustomUser.objects.filter(verification_code=new_code).exists():
-                self.verification_code = new_code
-                self.verification_code_expiration = now() + timedelta(minutes=10)  # Устанавливаем срок
-                self.save(update_fields=['verification_code', 'verification_code_expiration'])
-                return new_code
-        raise ValueError("Не удалось сгенерировать уникальный код подтверждения")
+        """Генерирует уникальный токен для подтверждения email"""
+        self.verification_code = get_random_string(length=64)  # Уникальный токен
+        self.verification_code_expiration = now() + timedelta(hours=24)  # Действует 24 часа
+        self.save(update_fields=['verification_code', 'verification_code_expiration'])
+        return self.verification_code  # Можно отправить по email
+
+    def confirm_email(self):
+        """Подтверждает email пользователя"""
+        self.is_active = True
+        self.verification_code = None
+        self.verification_code_expiration = None
+        self.save(update_fields=['is_active', 'verification_code', 'verification_code_expiration'])
 
     def __str__(self):
         return self.email or f"Telegram User {self.telegram_id}"
 
     @property
     def role(self):
+        """Возвращает роль пользователя (психолог или клиент)"""
         return 'PSYCHOLOGIST' if self.is_psychologist else 'CLIENT'
 
     def has_perm(self, perm, obj=None):
@@ -409,12 +406,19 @@ class PsychologistProfile(models.Model):
         blank=True
     )
 
+    balance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Баланс психолога"
+    )
+
     is_in_catalog = models.BooleanField(default=False)
     requests_count = models.PositiveIntegerField(default=0)
     is_verified = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"PsychologistProfile for {self.user.email}"
+        return f"Психолог: {self.user.email} (Баланс: {self.balance})"
 
     @property
     def telegram_id(self):
@@ -427,6 +431,7 @@ class PsychologistProfile(models.Model):
 
     @staticmethod
     def process_psychologist_application(application_id: int) -> None:
+        """Обрабатывает заявку психолога"""
         try:
             application = PsychologistApplication.objects.get(id=application_id)
 
