@@ -1,3 +1,5 @@
+import json
+import uuid
 from typing import Optional
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework import serializers
@@ -389,8 +391,7 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
         fields = [
             'first_name_ru', 'last_name_ru', 'middle_name_ru',
             'birth_date', 'gender', 'communication_language',
-            'service_countries', 'service_cities',
-            'phone_number', 'telegram_id', 'about_me_ru', 'catalog_description_ru'
+            'service_countries', 'service_cities', 'telegram_id', 'about_me_ru', 'catalog_description_ru'
         ]
 
 class EducationDocumentSerializer(serializers.ModelSerializer):
@@ -417,10 +418,58 @@ class QualificationSerializer(serializers.ModelSerializer):
             'office_photo', 'education_files', 'file_signature'
         ]
 
+class SessionItemSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    session_type = serializers.CharField()  # 👈 заменить ChoiceField на CharField
+    online_offline = serializers.CharField()  # 👈 заменить ChoiceField на CharField
+    country = serializers.CharField(max_length=100)
+    city = serializers.CharField(max_length=100)
+    duration = serializers.IntegerField(min_value=1)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
+    currency = serializers.CharField()  # 👈 заменить ChoiceField на CharField
+
+    def to_representation(self, instance):
+        # instance — это dict
+        result = dict(instance)
+        result["price"] = float(result.get("price", 0))
+        result["location"] = f"{result.get('country', '')}, {result.get('city', '')}".strip(", ")
+        return result
+
 class ServicePriceSerializer(serializers.ModelSerializer):
+    service_sessions = SessionItemSerializer(many=True)
+
     class Meta:
         model = PsychologistApplication
         fields = ['service_sessions']
+
+    def update(self, instance, validated_data):
+        new_sessions = validated_data.get('service_sessions', [])
+
+        existing_sessions = instance.service_sessions if isinstance(instance.service_sessions, list) else []
+        existing_sessions_dict = {str(s.get("id")): s for s in existing_sessions if "id" in s}
+
+        updated_sessions = []
+
+        for session in new_sessions:
+            session_id = str(session.get("id") or uuid.uuid4())  # 👈 UUID если нет
+            session["id"] = session_id
+            session["price"] = float(session["price"])
+
+            if session_id in existing_sessions_dict:
+                existing_sessions_dict[session_id].update(session)
+                updated_sessions.append(existing_sessions_dict[session_id])
+            else:
+                updated_sessions.append(session)
+
+        instance.service_sessions = updated_sessions
+        instance.save(update_fields=["service_sessions"])
+        return instance
+
+    def to_representation(self, instance):
+        sessions = instance.service_sessions if isinstance(instance.service_sessions, list) else []
+        return {
+            "service_sessions": SessionItemSerializer(sessions, many=True).data
+        }
 
 # загрузка доков
 class DocumentSerializer(serializers.ModelSerializer):

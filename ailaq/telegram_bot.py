@@ -113,19 +113,51 @@ async def leave_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text("Введите текст отзыва после завершения сессии.")
 
 
-async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    review_text = update.message.text
-    client_id = update.effective_chat.id
+def notify_client_to_leave_review(session: Session):
+    if not session.review_requested and session.client.telegram_id:
+        text = (
+            f"🙏 Пожалуйста, оцените вашу сессию с психологом {session.psychologist.user.get_full_name()}.\n"
+            "Введите оценку от 1 до 5 и добавьте ваш отзыв."
+        )
+        send_telegram_message(session.client.telegram_id, text)
+        session.review_requested = True
+        session.save()
+
+pending_reviews = {}
+
+async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = update.effective_chat.id
+    client = await sync_to_async(User.objects.get)(clientprofile__telegram_id=telegram_id)
 
     try:
-        client = await sync_to_async(User.objects.get)(clientprofile__telegram_id=client_id)
         session = await sync_to_async(Session.objects.filter)(
-            client=client.clientprofile, status="COMPLETED"
+            client=client.clientprofile,
+            status="COMPLETED",
+            review_requested=True,
+            review_submitted=False
         ).latest("end_time")
-        await sync_to_async(Review.objects.create)(session=session, text=review_text, rating=5)
-        await update.message.reply_text("Спасибо за ваш отзыв! Он будет передан психологу.")
-    except (User.DoesNotExist, Session.DoesNotExist):
-        await update.message.reply_text("Ошибка: У вас нет завершённых сессий.")
+
+        text = update.message.text.strip()
+        if text.isdigit() and 1 <= int(text) <= 5:
+            pending_reviews[telegram_id] = {"rating": int(text)}
+            await update.message.reply_text("Теперь введите текст отзыва.")
+        elif telegram_id in pending_reviews:
+            rating = pending_reviews[telegram_id]["rating"]
+            review = await sync_to_async(Review.objects.create)(
+                session=session,
+                client=client.clientprofile,
+                psychologist=session.psychologist,
+                rating=rating,
+                text=text
+            )
+            session.review_submitted = True
+            await sync_to_async(session.save)()
+            del pending_reviews[telegram_id]
+            await update.message.reply_text("Спасибо! Ваш отзыв сохранён.")
+        else:
+            await update.message.reply_text("Введите сначала число от 1 до 5.")
+    except Session.DoesNotExist:
+        await update.message.reply_text("У вас нет завершённых сессий без отзыва.")
 
 
 async def main() -> None:

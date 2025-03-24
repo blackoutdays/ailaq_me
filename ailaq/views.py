@@ -11,7 +11,7 @@ from django.utils.crypto import get_random_string
 from datetime import timedelta
 from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramAuthSerializer, \
     AuthenticatedQuickClientConsultationRequestSerializer, \
-    QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer
+    QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer
 from datetime import datetime
 from django.utils.timezone import now, make_aware
 from django.shortcuts import get_object_or_404, render
@@ -837,34 +837,101 @@ class ServicePriceView(APIView):
         responses={200: ServicePriceSerializer}
     )
     def get(self, request):
-        try:
-            application = get_object_or_404(PsychologistApplication, user=request.user)
-            serializer = ServicePriceSerializer(application)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger.error(f"Ошибка при получении стоимости услуг: {str(e)}")
-            return Response({"error": "Не удалось получить стоимость услуг."},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        application = get_object_or_404(PsychologistApplication, user=request.user)
+        serializer = ServicePriceSerializer(application)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
         tags=["Психолог"],
-        summary="Сохранить стоимость услуг психолога",
-        request=ServicePriceSerializer,
+        summary="Добавить одну услугу (сессию)",
+        request=SessionItemSerializer,
         responses={200: ServicePriceSerializer}
     )
     def post(self, request):
-        try:
-            application = get_object_or_404(PsychologistApplication, user=request.user)
-            serializer = ServicePriceSerializer(application, data=request.data, partial=True)
+        application = get_object_or_404(PsychologistApplication, user=request.user)
+        session_data = request.data
 
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
+        if not isinstance(session_data, dict):
+            return Response({"error": "Ожидалась одна сессия, как объект."}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"Ошибка при сохранении стоимости услуг: {str(e)}")
-            return Response({"error": "Не удалось сохранить стоимость услуг."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Генерируем UUID
+        if "id" not in session_data:
+            session_data["id"] = str(uuid.uuid4())
+
+        # Добавляем к текущим
+        sessions = application.service_sessions or []
+        sessions.append(session_data)
+
+        application.service_sessions = sessions
+        application.save(update_fields=["service_sessions"])
+
+        serializer = ServicePriceSerializer(application)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class ServicePriceSessionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Получить одну услугу по ID",
+        responses={200: SessionItemSerializer}
+    )
+    def get(self, request, session_id):
+        application = get_object_or_404(PsychologistApplication, user=request.user)
+        sessions = application.service_sessions or []
+
+        session = next((s for s in sessions if str(s.get("id")) == str(session_id)), None)
+        if not session:
+            return Response({"error": "Сессия не найдена"}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(session, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Обновить услугу по ID",
+        request=SessionItemSerializer,
+        responses={200: SessionItemSerializer}
+    )
+    def put(self, request, session_id):
+        application = get_object_or_404(PsychologistApplication, user=request.user)
+        sessions = application.service_sessions or []
+
+        updated = False
+        new_data = request.data
+
+        for idx, session in enumerate(sessions):
+            if str(session.get("id")) == str(session_id):
+                sessions[idx] = {**session, **new_data, "id": session_id}
+                updated = True
+                break
+
+        if not updated:
+            return Response({"error": "Сессия не найдена"}, status=status.HTTP_404_NOT_FOUND)
+
+        application.service_sessions = sessions
+        application.save(update_fields=["service_sessions"])
+        return Response(sessions[idx], status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Удалить услугу по ID",
+        responses={204: None}
+    )
+    def delete(self, request, session_id):
+        application = get_object_or_404(PsychologistApplication, user=request.user)
+        sessions = application.service_sessions or []
+
+        # Приводим session_id к строке, т.к. id внутри сессий — строки
+        session_id = str(session_id)
+
+        new_sessions = [s for s in sessions if str(s.get("id")) != session_id]
+
+        if len(new_sessions) == len(sessions):
+            return Response({"error": "Сессия не найдена"}, status=status.HTTP_404_NOT_FOUND)
+
+        application.service_sessions = new_sessions
+        application.save(update_fields=["service_sessions"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 # Сохранение и получение FAQ психолога
 class FAQView(APIView):
@@ -948,6 +1015,7 @@ class DocumentView(APIView):
 
         except PsychologistApplication.DoesNotExist:
             return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+
 class ReviewListView(APIView):
     """Получение списка отзывов о психологе"""
     permission_classes = [AllowAny]
@@ -979,43 +1047,43 @@ class ReviewListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 class ReviewCreateView(APIView):
-    """Оставить отзыв о психологе. Клиент может оставить отзыв только после завершённой сессии"""
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=["Клиент"],
-        summary="Создать отзыв",
-        description="Клиент может оставить отзыв о психологе только после завершённой сессии.",
+        summary="Создать отзыв (только после завершённой сессии)",
+        description="Отзыв можно оставить только после завершённой сессии, один раз на сессию.",
         request=ReviewSerializer,
-        responses={201: ReviewSerializer, 400: OpenApiResponse(description="Ошибка валидации")},
+        responses={201: ReviewSerializer}
     )
     def post(self, request):
         client = request.user.clientprofile
-        psychologist_id = request.data.get("psychologist_id")
         rating = request.data.get("rating")
         text = request.data.get("text", "")
 
-        if not psychologist_id:
-            return Response({"error": "Не указан ID психолога."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if rating is None or not (1 <= rating <= 5):
-            return Response({"error": "Рейтинг должен быть от 1 до 5."}, status=status.HTTP_400_BAD_REQUEST)
+        if rating is None or not (1 <= int(rating) <= 5):
+            return Response({"error": "Рейтинг должен быть от 1 до 5."}, status=400)
 
         try:
-            completed_session = Session.objects.filter(
-                client=client, psychologist_id=psychologist_id, status="COMPLETED"
+            session = Session.objects.filter(
+                client=client, status="COMPLETED", review_submitted=False
             ).latest("end_time")
         except Session.DoesNotExist:
-            return Response({"error": "Вы можете оставить отзыв только после завершённой сессии."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if Review.objects.filter(session=completed_session).exists():
-            return Response({"error": "Вы уже оставили отзыв для этой сессии."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "У вас нет завершённой сессии для отзыва."}, status=400)
 
         review = Review.objects.create(
-            session=completed_session, client=client, psychologist_id=psychologist_id, rating=rating, text=text
+            session=session,
+            client=client,
+            psychologist=session.psychologist,
+            rating=rating,
+            text=text
         )
 
-        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+        session.review_submitted = True
+        session.save()
+
+        return Response(ReviewSerializer(review).data, status=201)
+
 
 class PsychologistSessionView(APIView):
     """

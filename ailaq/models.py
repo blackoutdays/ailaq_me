@@ -236,9 +236,7 @@ class PsychologistApplication(models.Model):
     service_countries = models.JSONField(default=list, blank=True, help_text="Список стран приема")
     service_cities = models.JSONField(default=list, blank=True, help_text="Список городов приема")
 
-
     telegram_id = models.CharField(max_length=100, null=True, blank=True)  # Ник или ID в Telegram
-    phone_number = models.CharField(max_length=15, null=True, blank=True)  # Номер телефона
 
     # О себе
     about_me_ru = models.TextField(null=True, blank=True)
@@ -553,7 +551,8 @@ class Session(models.Model):
         on_delete=models.CASCADE,
         related_name='sessions'
     )
-
+    review_requested = models.BooleanField(default=False)
+    review_submitted = models.BooleanField(default=False)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=[('SCHEDULED', 'Scheduled'), ('COMPLETED', 'Completed'), ('CANCELED', 'Canceled')], default='SCHEDULED')
@@ -588,6 +587,13 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Review by {self.client_name or 'Unknown'} for {self.psychologist_name or 'Unknown'} (Rating: {self.rating})"
+
+    def save(self, *args, **kwargs):
+        if not self.client_name:
+            self.client_name = self.client.full_name
+        if not self.psychologist_name:
+            self.psychologist_name = self.psychologist.user.get_full_name()
+        super().save(*args, **kwargs)
 
 class Specialization(models.Model):
     name = models.CharField(max_length=255)
