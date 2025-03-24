@@ -1084,7 +1084,6 @@ class ReviewCreateView(APIView):
 
         return Response(ReviewSerializer(review).data, status=201)
 
-
 class PsychologistSessionView(APIView):
     """
     🔹 Психолог может видеть список всех записей клиентов к нему.

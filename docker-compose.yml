@@ -90,7 +90,7 @@ services:
       - web
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings
-      - PYTHONPATH=/app  # ← вот это
+      - PYTHONPATH=/app
     restart: always
 
 volumes:

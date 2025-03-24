@@ -3,7 +3,7 @@ from datetime import timedelta
 import os
 import environ
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8001")  # Значение по умолчанию
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://91.147.92.219:8080")
 
 env = environ.Env(
     DEBUG=(bool, False)
