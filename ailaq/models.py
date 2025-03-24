@@ -1,12 +1,10 @@
 from datetime import timedelta
-
 from django.utils.crypto import get_random_string
 from django.utils.timezone import now
 from django.db.models import Avg
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
-import random
 import logging
 from ailaq.enums import (
     ClientGenderEnum, PsychologistAgeEnum, PsychologistGenderEnum,
@@ -23,16 +21,30 @@ class CustomUserManager(BaseUserManager):
 
         email = self.normalize_email(email) if email else None
 
+        #  Если вход через Telegram → пользователь активен сразу
+        is_active = bool(telegram_id)
+
         user = self.model(
             email=email,
             telegram_id=telegram_id,
-            is_active=False,  # Пользователь должен подтвердить email
+            is_active=is_active,  #  Теперь Telegram-пользователи активны сразу
             **extra_fields
         )
 
         if password:
             user.set_password(password)
         user.save(using=self._db)
+
+        #  Если регистрация через email — отправляем письмо подтверждения
+        if email:
+            verification_code = get_random_string(length=32)
+            user.verification_code = verification_code
+            user.verification_code_expiration = now() + timedelta(hours=24)
+            user.save()
+
+            confirmation_link = f"{settings.FRONTEND_URL}/confirm-email/{verification_code}"
+            from ailaq.tasks import send_email_async
+            send_email_async.delay("Подтверждение email", f"Подтвердите email: {confirmation_link}", [user.email])
 
         return user
 
@@ -46,7 +58,6 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
 
         return self.create_user(email=email, password=password, **extra_fields)
-
 
 class CustomUser(AbstractBaseUser):
     """Кастомная модель пользователя с подтверждением email"""
@@ -129,9 +140,6 @@ class ClientProfile(models.Model):
     country = models.CharField(max_length=100, null=True, blank=True, verbose_name="Страна")
     city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Город")
 
-    # Фото профиля
-    profile_image = models.ImageField(upload_to='profile_images/', null=True, blank=True, verbose_name="Фото профиля")
-
     def __str__(self):
         return f"Client Profile: {self.full_name or self.user.email or self.user.telegram_id}"
 
@@ -170,15 +178,9 @@ class QuickClientConsultationRequest(models.Model):
     )
     topic = models.CharField(max_length=255, verbose_name="Тема")
     comments = models.TextField(verbose_name="Комментарий")
+    client_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
     created_at = models.DateTimeField(default=now)
-    verification_code = models.CharField(max_length=6, unique=True, blank=True, null=True,
-                                         verbose_name="Код подтверждения")
-    # 🔹 Добавляем telegram_id
     telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID", editable=False)
-    def save(self, *args, **kwargs):
-        if not self.verification_code:
-            self.verification_code = str(random.randint(100000, 999999))
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Заявка от {self.client_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
@@ -331,6 +333,22 @@ class PsychologistApplication(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     documents_requested = models.BooleanField(default=False)
 
+    def save(self, *args, **kwargs):
+        """
+        При изменении статуса заявки на `APPROVED` создаём `PsychologistProfile`
+        """
+        # 🔹 Получаем старый статус заявки до сохранения
+        if self.pk:
+            old_status = PsychologistApplication.objects.filter(pk=self.pk).values_list("status", flat=True).first()
+        else:
+            old_status = None
+
+        super().save(*args, **kwargs)
+
+        # 🔹 Если статус изменился с `PENDING` на `APPROVED`, создаём профиль
+        if old_status == "PENDING" and self.status == "APPROVED":
+            PsychologistProfile.process_psychologist_application(self.id)
+
     # **Методы**
     def add_service_session(self, session_type, online_offline, country, city, duration, price, currency):
         """Добавляет новый прием (сессию)."""
@@ -434,17 +452,19 @@ class PsychologistProfile(models.Model):
         """Обрабатывает заявку психолога"""
         try:
             application = PsychologistApplication.objects.get(id=application_id)
+            user = application.user
 
             if application.status == 'APPROVED':
-                user = application.user
-                user.is_psychologist = True
+                user.is_psychologist = True  #  Статус "психолог"
                 user.save()
 
-                profile, created = PsychologistProfile.objects.get_or_create(user=user)
+                #  Создаём профиль, если его нет
+                profile, created = PsychologistProfile.objects.get_or_create(user=user, application=application)
+
                 profile.is_verified = True
+                profile.update_catalog_visibility()  #  Проверяем, может ли он быть в каталоге
                 profile.save()
 
-                # локальный импорт
                 from ailaq.emails import send_approval_email
                 send_approval_email(application)
 
@@ -456,28 +476,53 @@ class PsychologistProfile(models.Model):
             logger.error(f"Application with ID {application_id} not found.")
 
     def get_average_rating(self) -> float:
-        """Возвращает средний рейтинг психолога на основе завершённых сессий.
-        Если отзывов нет, возвращает 0.0 """
-        average_rating = self.reviews.filter(session__status='COMPLETED').aggregate(
-            avg_rating=Avg('rating')
-        )['avg_rating'] or 0.0
+        """Возвращает средний рейтинг психолога на основе завершённых сессий."""
+        average_rating = Review.objects.filter(
+            psychologist=self, session__status='COMPLETED'
+        ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0.0
 
         return round(average_rating, 1)
 
-    def get_reviews_count(self):
-        """ Возвращает количество отзывов для завершённых сессий психолога """
-        return Review.objects.filter(session__psychologist=self, session__status='COMPLETED').count()
+    def is_ready_for_moderation(self) -> bool:
+        """Проверяет, заполнены ли все обязательные поля."""
+        required_fields = [
+            self.first_name_ru, self.last_name_ru, self.birth_date, self.gender,
+            self.communication_language, self.qualification, self.experience_years,
+            self.service_countries, self.service_cities, self.education
+        ]
+
+        return all(bool(value) for value in required_fields)
+
+    def get_reviews_count(self) -> int:
+        """Возвращает количество завершённых отзывов"""
+        return Review.objects.filter(psychologist=self, session__status='COMPLETED').count()
 
     def update_catalog_visibility(self):
-        self.is_in_catalog = (
-            self.is_verified and
-            self.application and
-            self.application.purchased_applications >= 3
-        )
-        self.save()
+        """Психолог попадает в каталог, если у него >=3 покупок и >=3 оценённых отзывов."""
+        if self.application:
+            self.is_in_catalog = (
+                    self.is_verified and
+                    self.application.purchased_applications >= 3 and
+                    Review.objects.filter(psychologist=self, session__status='COMPLETED', rating__gt=0).count() >= 3
+            )
+            self.save(update_fields=["is_in_catalog"])
 
 def get_default_cost():
     return settings.REQUEST_COST
+
+def save(self, *args, **kwargs):
+    """
+    При изменении статуса заявки на `APPROVED` создаём `PsychologistProfile`
+    """
+    old_status = None
+    if self.pk:
+        old_status = PsychologistApplication.objects.filter(pk=self.pk).values_list("status", flat=True).first()
+
+    super().save(*args, **kwargs)
+
+    # Если это новая заявка и она сразу "APPROVED" → создаём профиль
+    if self.pk and (old_status is None or old_status == "PENDING") and self.status == "APPROVED":
+        PsychologistProfile.process_psychologist_application(self.id)
 
 class PurchasedRequest(models.Model):
     psychologist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)

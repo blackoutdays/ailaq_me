@@ -59,11 +59,11 @@ class RegisterSerializer(serializers.ModelSerializer):
     """
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
-    is_psychologist = serializers.BooleanField(default=False)
+    wants_to_be_psychologist = serializers.BooleanField(default=False)
 
     class Meta:
         model = CustomUser
-        fields = ['email', 'password', 'password_confirm', 'is_psychologist']
+        fields = ['email', 'password', 'password_confirm', 'wants_to_be_psychologist']
 
     def validate(self, attrs):
         """ Проверяем совпадение паролей """
@@ -72,17 +72,22 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        """ Создает нового пользователя """
-        validated_data.pop('password_confirm')  # Убираем повтор пароля
-        is_psychologist = validated_data.pop("is_psychologist")
+        """ Создаёт нового пользователя """
+        validated_data.pop('password_confirm')  # убираем повтор пароля
+        wants_to_be_psychologist = validated_data.pop("wants_to_be_psychologist")
 
         user = CustomUser.objects.create(
             email=validated_data['email'],
-            is_psychologist=is_psychologist
+            wants_to_be_psychologist=wants_to_be_psychologist,
+            is_active=False  # Email должен быть подтверждён
         )
         user.set_password(validated_data['password'])
-        user.is_active = False  # Email должен быть подтвержден
+        user.verification_code = get_random_string(length=32)
+        user.verification_code_expiration = now() + timedelta(hours=24)
         user.save()
+
+        if wants_to_be_psychologist:
+            PsychologistApplication.objects.get_or_create(user=user)
 
         return user
 
@@ -108,38 +113,21 @@ class LoginSerializer(serializers.Serializer):
         attrs["user"] = user
         return attrs
 
-# class LoginSerializer(serializers.Serializer):
-#     email = serializers.EmailField()
-#     password = serializers.CharField(write_only=True)
-#
-#     def validate(self, data):
-#         if not data.get("email") or not data.get("password"):
-#             raise serializers.ValidationError("Email и пароль обязательны.")
-#         return data
-
-# Профиль клиента
 class ClientProfileSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(required=False)
+    email = serializers.EmailField(source="user.email", read_only=True)  # Показываем email из CustomUser
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
+    telegram_id = serializers.CharField(source="user.telegram_id", read_only=True)  # Показываем Telegram ID
 
     class Meta:
         model = ClientProfile
         fields = [
-            'full_name',
-            'age',
-            'gender',
-            'communication_language',
-            'country',
-            'city',
-            'profile_image',
-            'email',
-            'password',
-            'confirm_password',
+            'full_name', 'age', 'gender', 'communication_language', 'country', 'city',
+            'email', 'password', 'confirm_password', 'telegram_id',
         ]
 
     def validate(self, data):
-        """ Проверяем, что если вводится пароль, то он должен совпадать с confirm_password. """
+        """ Проверяем совпадение паролей. """
         if "password" in data or "confirm_password" in data:
             if data.get("password") != data.get("confirm_password"):
                 raise serializers.ValidationError({"password": "Пароли не совпадают."})
@@ -147,59 +135,116 @@ class ClientProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """
-        Если введен email, он сохраняется в `CustomUser` и требует подтверждения.
-        Если введен пароль, он сохраняется в `CustomUser`.
+        Логика обновления профиля:
+        1. Если у пользователя нет email (зарегистрировался через Telegram), он может его ввести.
+        2. Если вводится новый пароль, требуется ввести текущий пароль.
+        3. Привязка Telegram возможна только один раз.
         """
         user = instance.user
         email = validated_data.pop("email", None)
         password = validated_data.pop("password", None)
 
-        if email and not user.email:
+        #  Если пользователь зашел через Telegram и вводит email
+        if email:
+            if user.email:
+                raise serializers.ValidationError({"email": "Изменение email запрещено."})
             user.email = email
             user.is_active = False  # Требуем подтверждение email
             user.verification_code = get_random_string(length=32)
             user.verification_code_expiration = now() + timedelta(hours=24)
             user.save()
 
-            confirmation_link = f"https://your-platform.com/confirm-email/{user.verification_code}"
+            # Отправляем письмо с подтверждением
+            confirmation_link = f"{settings.FRONTEND_URL}/confirm-email/{user.verification_code}"
             send_email_async.delay("Подтверждение email", f"Подтвердите email: {confirmation_link}", [user.email])
 
+        # Установка нового пароля (только если указан текущий)
         if password:
+            current_password = self.initial_data.get("current_password")
+            if not user.check_password(current_password):
+                raise serializers.ValidationError({"password": "Неверный текущий пароль."})
             user.set_password(password)
             user.save()
 
         return super().update(instance, validated_data)
 
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, min_length=8)
+    confirm_new_password = serializers.CharField(required=True, min_length=8)
+
+    def validate(self, data):
+        if data["new_password"] != data["confirm_new_password"]:
+            raise serializers.ValidationError({"confirm_new_password": "Пароли не совпадают."})
+        return data
 
 class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
-    client_name = serializers.CharField(help_text="Как к вам обращаться?")
-    age = serializers.IntegerField(help_text="Возраст")
-    gender = serializers.ChoiceField(
-        choices=[('MALE', 'Мужской'), ('FEMALE', 'Женский')],
-        help_text="Пол"
-    )
-    psychologist_language = serializers.ChoiceField(
-        choices=[('RU', 'Русский'), ('EN', 'Английский'), ('KZ', 'Казахский')],
-        help_text="Предпочтительный язык общения"
-    )
-    verification_code = serializers.CharField(read_only=True, help_text="Код для привязки Telegram")
-
     class Meta:
         model = QuickClientConsultationRequest
         fields = [
             'client_name', 'age', 'gender', 'psychologist_language',
             'preferred_psychologist_age', 'psychologist_gender', 'topic',
-            'comments', 'verification_code'
+            'comments'
         ]
 
-    def create(self, validated_data):
-        verification_code = str(random.randint(1000, 9999))
+    def to_internal_value(self, data):
+        """
+        Удаляем client_name, age и gender из входящих данных, если пользователь авторизован и есть профиль.
+        """
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and hasattr(request.user, 'client_profile'):
+            for field in ['client_name', 'age', 'gender']:
+                data.pop(field, None)
+        return super().to_internal_value(data)
 
-        consultation_request = QuickClientConsultationRequest.objects.create(
-            verification_code=verification_code, **validated_data
-        )
+    def validate(self, data):
+        user = self.context.get("request").user if self.context.get("request") else None
 
-        return consultation_request
+        # Если пользователь НЕ аутентифицирован — все поля обязательны
+        if not user or not user.is_authenticated:
+            required_fields = ['client_name', 'age', 'gender', 'psychologist_language',
+                               'preferred_psychologist_age', 'psychologist_gender', 'topic']
+            for field in required_fields:
+                if not data.get(field):
+                    raise serializers.ValidationError({field: "Это поле обязательно."})
+        return data
+
+class AuthenticatedQuickClientConsultationRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = QuickClientConsultationRequest
+        fields = [
+            'psychologist_language',
+            'preferred_psychologist_age',
+            'psychologist_gender',
+            'topic',
+            'comments'
+        ]
+
+class QuickClientConsultationAnonymousSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = QuickClientConsultationRequest
+        fields = [
+            'client_name',
+            'age',
+            'gender',
+            'psychologist_language',
+            'preferred_psychologist_age',
+            'psychologist_gender',
+            'topic',
+            'comments',
+        ]
+
+    def validate(self, data):
+        required_fields = [
+            'client_name', 'age', 'gender',
+            'psychologist_language', 'preferred_psychologist_age',
+            'psychologist_gender', 'topic'
+        ]
+        for field in required_fields:
+            if not data.get(field):
+                raise serializers.ValidationError({field: "Это поле обязательно."})
+        return data
 
 # Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):

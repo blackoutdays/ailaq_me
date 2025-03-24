@@ -1,11 +1,15 @@
 services:
   web:
     build: .
-    command: bash -c "python manage.py migrate && gunicorn --bind 0.0.0.0:8000 config.wsgi:application --workers=4 --timeout=600"
+    command: >
+      bash -c "
+        python manage.py collectstatic --noinput &&
+        python manage.py migrate &&
+        gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=4 --timeout=600
+      "
     volumes:
       - .:/app
       - ./static:/app/static
-      - ./staticfiles:/app/staticfiles
       - ./media:/app/media
     ports:
       - "8000:8000"
@@ -13,6 +17,7 @@ services:
       - DEBUG=True
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=rpc://
+      - DJANGO_SETTINGS_MODULE=config.settings
     depends_on:
       - db
       - rabbitmq
@@ -35,7 +40,7 @@ services:
       - ./static:/app/static
       - ./media:/app/media
     ports:
-      - "8080:80"  # Измененный порт для Nginx
+      - "8080:80"
     depends_on:
       - web
 
@@ -43,8 +48,8 @@ services:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "5672:5672"  # AMQP (Celery)
-      - "15672:15672"  # Web UI
+      - "5672:5672"
+      - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
@@ -57,26 +62,36 @@ services:
     volumes:
       - .:/app
     environment:
-      - DEBUG=True
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=rpc://
+      - DJANGO_SETTINGS_MODULE=config.settings
     depends_on:
-      - db
-      - rabbitmq
       - web
+      - rabbitmq
+      - db
 
   beat:
     build: .
-    command: celery -A config beat --loglevel=info
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - .:/app
     environment:
-      - DEBUG=True
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
       - CELERY_RESULT_BACKEND=rpc://
+      - DJANGO_SETTINGS_MODULE=config.settings
     depends_on:
       - worker
       - rabbitmq
+      - db
+    restart: on-failure
+
+  telegram_bot:
+    build: .
+    command: python manage.py run_bot
+    depends_on:
+      - web
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
 
 volumes:
   postgres_data:
