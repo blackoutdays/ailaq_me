@@ -18,3 +18,4 @@ redis
 django-cors-headers
 pillow
 nest_asyncio
+requests
