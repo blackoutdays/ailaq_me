@@ -84,7 +84,7 @@ services:
 
   telegram_bot:
     build: .
-    command: python manage.py run_bot
+    command: python ailaq/telegram_bot.py
     depends_on:
       - web
     environment:
