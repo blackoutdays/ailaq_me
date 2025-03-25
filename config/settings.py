@@ -3,7 +3,7 @@ from datetime import timedelta
 import os
 import environ
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://91.147.92.219:8080")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ailaq.me")
 
 env = environ.Env(
     DEBUG=(bool, False)
@@ -168,45 +168,6 @@ EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'info@ailaq.me')
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'console': {
-#             'level': 'INFO',
-#             'class': 'logging.StreamHandler',
-#             'formatter': 'verbose',
-#         },
-#     },
-#     'loggers': {
-#         'django': {
-#             'handlers': ['console'],
-#             'level': 'INFO',
-#             'propagate': True,
-#         },
-#         'django.request': {
-#             'handlers': ['console'],
-#             'level': 'WARNING',
-#             'propagate': False,
-#         },
-#         'django.security': {
-#             'handlers': ['console'],
-#             'level': 'WARNING',
-#             'propagate': False,
-#         },
-#         'telegram_auth': {  # ✅ Теперь внутри loggers
-#             'handlers': ['console'],
-#             'level': 'DEBUG',
-#             'propagate': False,
-#         },
-#     },
-# }
 
 LOGGING = {
     'version': 1,
