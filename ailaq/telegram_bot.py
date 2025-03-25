@@ -69,7 +69,6 @@ async def link_telegram_user(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(" Ваш Telegram успешно привязан!")
         await send_welcome_message(telegram_id)
 
-
 async def schedule_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Введите ID психолога для назначения сессии.")
 
@@ -108,10 +107,8 @@ async def process_session_request(update: Update, context: ContextTypes.DEFAULT_
     except ValueError:
         await update.message.reply_text("Ошибка: Telegram ID должен быть числом.")
 
-
 async def leave_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Введите текст отзыва после завершения сессии.")
-
 
 def notify_client_to_leave_review(session: Session):
     if not session.review_requested and session.client.telegram_id:
@@ -159,7 +156,6 @@ async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Session.DoesNotExist:
         await update.message.reply_text("У вас нет завершённых сессий без отзыва.")
 
-
 async def main() -> None:
     application = ApplicationBuilder().token(settings.TELEGRAM_BOT_TOKEN).build()
 
@@ -175,7 +171,6 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_review))
 
     await application.run_polling()
-
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()

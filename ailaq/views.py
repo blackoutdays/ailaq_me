@@ -11,7 +11,8 @@ from django.utils.crypto import get_random_string
 from datetime import timedelta
 from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramAuthSerializer, \
     AuthenticatedQuickClientConsultationRequestSerializer, \
-    QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer
+    QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
+    PsychologistChangePasswordSerializer
 from datetime import datetime
 from django.utils.timezone import now, make_aware
 from django.shortcuts import get_object_or_404, render
@@ -217,6 +218,23 @@ class LoginView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class PsychologistChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Смена пароля для психолога",
+        request=PsychologistChangePasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Пароль успешно обновлён"),
+            400: OpenApiResponse(description="Ошибки валидации, например: пароли не совпадают или текущий неверный"),
+        }
+    )
+    def post(self, request):
+        serializer = PsychologistChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):

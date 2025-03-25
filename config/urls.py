@@ -13,7 +13,7 @@ from ailaq.views import (
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
     PsychologistSessionView, ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
     QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView,
-    TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView
+    TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView, PsychologistChangePasswordView
 )
 
 router = DefaultRouter()
@@ -42,14 +42,14 @@ urlpatterns = [
     path('api/login/', LoginView.as_view(), name='login'),
     path("api/confirm-email/<str:verification_code>/", ConfirmEmailView.as_view(), name="confirm-email"),
     path("api/resend-verification/", ResendVerificationEmailView.as_view(), name="resend-verification"),
+    path("psychologists/change-password/", PsychologistChangePasswordView.as_view(), name="psychologist-change-password"),
 
-    # Публичные эндпоинты для клиентов
+                  # Публичные эндпоинты для клиентов
     path('api/clients/me/', client_me, name='client-me'),
 
     path('api/psychologists/<int:psychologist_id>/qualification/', PublicQualificationView.as_view(), name='public-qualification'),
     path('api/psychologists/<int:psychologist_id>/service_price/', PublicServicePriceView.as_view(), name='public-service-price'),
-    path("api/psychologist/service_sessions/<str:session_id>/", ServicePriceSessionDetailView.as_view(),
-       name="service-session-detail"),
+    path("api/psychologist/service_sessions/<str:session_id>/", ServicePriceSessionDetailView.as_view(), name="service-session-detail"),
     path('api/psychologists/<int:psychologist_id>/reviews/', PublicReviewListView.as_view(), name='public-reviews'),
     path('api/psychologists/<int:psychologist_id>/faq/', PublicFAQView.as_view(), name='public-faq'),
     path('api/psychologists/<int:psychologist_id>/profile/', PublicPsychologistProfileView.as_view(), name='public-psychologist-profile'),
@@ -88,7 +88,7 @@ urlpatterns = [
 
     path('telegram-auth/', TelegramAuthPageView.as_view(), name='telegram-auth-page'),
 
-              ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Добавление обработки медиафайлов в режиме DEBUG
 if settings.DEBUG:

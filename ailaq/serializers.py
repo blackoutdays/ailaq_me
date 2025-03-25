@@ -115,61 +115,6 @@ class LoginSerializer(serializers.Serializer):
         attrs["user"] = user
         return attrs
 
-class ClientProfileSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(source="user.email", read_only=True)  # Показываем email из CustomUser
-    password = serializers.CharField(write_only=True, required=False, min_length=8)
-    confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
-    telegram_id = serializers.CharField(source="user.telegram_id", read_only=True)  # Показываем Telegram ID
-
-    class Meta:
-        model = ClientProfile
-        fields = [
-            'full_name', 'age', 'gender', 'communication_language', 'country', 'city',
-            'email', 'password', 'confirm_password', 'telegram_id',
-        ]
-
-    def validate(self, data):
-        """ Проверяем совпадение паролей. """
-        if "password" in data or "confirm_password" in data:
-            if data.get("password") != data.get("confirm_password"):
-                raise serializers.ValidationError({"password": "Пароли не совпадают."})
-        return data
-
-    def update(self, instance, validated_data):
-        """
-        Логика обновления профиля:
-        1. Если у пользователя нет email (зарегистрировался через Telegram), он может его ввести.
-        2. Если вводится новый пароль, требуется ввести текущий пароль.
-        3. Привязка Telegram возможна только один раз.
-        """
-        user = instance.user
-        email = validated_data.pop("email", None)
-        password = validated_data.pop("password", None)
-
-        #  Если пользователь зашел через Telegram и вводит email
-        if email:
-            if user.email:
-                raise serializers.ValidationError({"email": "Изменение email запрещено."})
-            user.email = email
-            user.is_active = False  # Требуем подтверждение email
-            user.verification_code = get_random_string(length=32)
-            user.verification_code_expiration = now() + timedelta(hours=24)
-            user.save()
-
-            # Отправляем письмо с подтверждением
-            confirmation_link = f"{settings.FRONTEND_URL}/confirm-email/{user.verification_code}"
-            send_email_async.delay("Подтверждение email", f"Подтвердите email: {confirmation_link}", [user.email])
-
-        # Установка нового пароля (только если указан текущий)
-        if password:
-            current_password = self.initial_data.get("current_password")
-            if not user.check_password(current_password):
-                raise serializers.ValidationError({"password": "Неверный текущий пароль."})
-            user.set_password(password)
-            user.save()
-
-        return super().update(instance, validated_data)
-
 class ChangePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True, min_length=8)
@@ -179,6 +124,61 @@ class ChangePasswordSerializer(serializers.Serializer):
         if data["new_password"] != data["confirm_new_password"]:
             raise serializers.ValidationError({"confirm_new_password": "Пароли не совпадают."})
         return data
+
+class ClientProfileSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source="user.email", read_only=True)
+    current_password = serializers.CharField(write_only=True, required=False)
+    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
+    telegram_id = serializers.CharField(source="user.telegram_id", read_only=True)
+
+    class Meta:
+        model = ClientProfile
+        fields = [
+            'full_name', 'age', 'gender', 'communication_language', 'country', 'city',
+            'email', 'current_password', 'password', 'confirm_password', 'telegram_id',
+        ]
+
+    def validate(self, data):
+        """ Проверка паролей только если переданы. """
+        password = data.get("password")
+        confirm_password = data.get("confirm_password")
+
+        if password or confirm_password:
+            if not password or not confirm_password:
+                raise serializers.ValidationError({"password": "Укажите и пароль, и подтверждение пароля."})
+            if password != confirm_password:
+                raise serializers.ValidationError({"password": "Пароли не совпадают."})
+
+        return data
+
+    def update(self, instance, validated_data):
+        user = instance.user
+        email = validated_data.pop("email", None)
+        password = validated_data.pop("password", None)
+        current_password = validated_data.pop("current_password", None)
+
+        # Обновление email, если пользователь телеграмный и ещё не вводил
+        if email:
+            if user.email:
+                raise serializers.ValidationError({"email": "Изменение email запрещено."})
+            user.email = email
+            user.is_active = False
+            user.verification_code = get_random_string(length=32)
+            user.verification_code_expiration = now() + timedelta(hours=24)
+            user.save()
+
+            confirmation_link = f"{settings.FRONTEND_URL}/confirm-email/{user.verification_code}"
+            send_email_async.delay("Подтверждение email", f"Подтвердите email: {confirmation_link}", [user.email])
+
+        # Обновление пароля, если указан
+        if password:
+            if not current_password or not user.check_password(current_password):
+                raise serializers.ValidationError({"password": "Неверный текущий пароль."})
+            user.set_password(password)
+            user.save()
+
+        return super().update(instance, validated_data)
 
 class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
     class Meta:
@@ -271,6 +271,27 @@ class ReviewSerializer(serializers.ModelSerializer):
             'text',
             'created_at',
         ]
+
+class PsychologistChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, min_length=8)
+    confirm_new_password = serializers.CharField(required=True, min_length=8)
+
+    def validate(self, data):
+        if data["new_password"] != data["confirm_new_password"]:
+            raise serializers.ValidationError({"confirm_new_password": "Пароли не совпадают."})
+
+        user = self.context["request"].user
+        if not user.check_password(data["current_password"]):
+            raise serializers.ValidationError({"current_password": "Неверный текущий пароль."})
+
+        return data
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save()
+        return user
 
 class PsychologistProfileSerializer(serializers.ModelSerializer):
     profile_id = serializers.IntegerField(source="id", read_only=True)  # ID профиля психолога
@@ -382,7 +403,6 @@ class CatalogSerializer(serializers.ModelSerializer):
 
     def get_reviews_count(self, obj) -> Optional[int]:
         return obj.get_reviews_count()
-
 
 #для вьющек сериализаторы по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
