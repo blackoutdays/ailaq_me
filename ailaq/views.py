@@ -677,12 +677,33 @@ class PublicFAQView(APIView):
         serializer = FAQListSerializer({"faqs": faqs})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+class PsychologistOnlyAPIView(APIView):
+    """
+    Базовый класс для всех вьюх психолога.
+    Запрещает доступ клиентам (у которых есть client_profile и нет is_psychologist).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def dispatch(self, request, *args, **kwargs):
+        user = request.user
+
+        if not user.is_authenticated:
+            raise PermissionDenied("Необходима авторизация.")
+
+        if hasattr(user, 'client_profile') and not user.wants_to_be_psychologist:
+            raise PermissionDenied("Клиенты не имеют доступа к разделу психолога.")
+
+        if not user.is_psychologist:
+            raise PermissionDenied("Доступ разрешён только для психологов.")
+
+        return super().dispatch(request, *args, **kwargs)
+
+
 # Получение профиля психолога
-class PsychologistSelfProfileView(APIView):
+class PsychologistSelfProfileView(PsychologistOnlyAPIView):
     """
     🔹 API для получения и редактирования личного профиля психолога
     """
-    permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=["Психолог"],
@@ -699,12 +720,10 @@ class PsychologistSelfProfileView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 # Получение полного профиля психолога
-class PsychologistProfileView(APIView):
+class PsychologistProfileView(PsychologistOnlyAPIView):
     """
     Получает весь профиль психолога, включая отзывы.
     """
-    permission_classes = [IsAuthenticated]
-
     @extend_schema(
         tags=["Психолог"],
         summary="Получить полный профиль заявки психолога",
@@ -740,8 +759,7 @@ class PsychologistProfileView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # Сохранение и получение личной информации психолога
-class PersonalInfoView(APIView):
-    permission_classes = [IsAuthenticated]
+class PersonalInfoView(PsychologistOnlyAPIView):
 
     @extend_schema(
         tags=["Психолог"],
@@ -789,11 +807,10 @@ class PersonalInfoView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # Сохранение и получение квалификации
-class QualificationView(APIView):
+class QualificationView(PsychologistOnlyAPIView):
     """
     Сохранение квалификации психолога, включая загрузку файлов.
     """
-    permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
 
     @extend_schema(
@@ -863,8 +880,7 @@ class QualificationView(APIView):
             )
 
 # Сохранение и получение стоимости услуг
-class ServicePriceView(APIView):
-    permission_classes = [IsAuthenticated]
+class ServicePriceView(PsychologistOnlyAPIView):
 
     @extend_schema(
         tags=["Психолог"],
@@ -903,8 +919,7 @@ class ServicePriceView(APIView):
         serializer = ServicePriceSerializer(application)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-class ServicePriceSessionDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+class ServicePriceSessionDetailView(PsychologistOnlyAPIView):
 
     @extend_schema(
         tags=["Психолог"],
@@ -969,12 +984,10 @@ class ServicePriceSessionDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 # Сохранение и получение FAQ психолога
-class FAQView(APIView):
+class FAQView(PsychologistOnlyAPIView):
     """
     Получение и сохранение FAQ психолога.
     """
-    permission_classes = [IsAuthenticated]
-
     @extend_schema(
         tags=["Психолог"],
         operation_id="get_faqs",
@@ -1020,8 +1033,7 @@ class FAQView(APIView):
             return Response({"error": "Не удалось сохранить FAQ."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # Загрузка документов
-class DocumentView(APIView):
-    permission_classes = [IsAuthenticated]
+class DocumentView(PsychologistOnlyAPIView):
 
     @extend_schema(
         tags=["Психолог"],
@@ -1051,9 +1063,8 @@ class DocumentView(APIView):
         except PsychologistApplication.DoesNotExist:
             return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
 
-class ReviewListView(APIView):
+class ReviewListView(PsychologistOnlyAPIView):
     """Получение списка отзывов о психологе"""
-    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["Психолог"],
