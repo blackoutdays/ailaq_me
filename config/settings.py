@@ -111,7 +111,7 @@ DATABASES = {
         'NAME': env('POSTGRES_DB', default='ailaq'),
         'USER': env('POSTGRES_USER', default='aruka'),
         'PASSWORD': env('POSTGRES_PASSWORD', default='aruka'),
-        'HOST': env('POSTGRES_HOST', default='localhost'),
+        'HOST': env('POSTGRES_HOST', default='db'),
         'PORT': env('POSTGRES_PORT', default='5432'),
     }
 }
