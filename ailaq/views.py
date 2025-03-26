@@ -42,6 +42,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 import telegram
 import logging
 
+from .telegram_bot import send_telegram_message
+
 logger = logging.getLogger(__name__)
 logger = logging.getLogger("telegram_auth")
 User = get_user_model()
@@ -239,7 +241,7 @@ class PsychologistChangePasswordView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def get(self, request):
-        print(f" ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
+        print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
 
         auth_data = request.query_params.dict()
         received_hash = auth_data.pop('hash', None)
@@ -255,31 +257,48 @@ class TelegramAuthView(APIView):
             return Response({"error": "Неверная подпись"}, status=400)
 
         telegram_id = int(auth_data['id'])
-        first_name = auth_data.get('first_name', '')
         username = auth_data.get('username', f"user_{telegram_id}")
+        first_name = auth_data.get('first_name', '')
 
-        email = f"{telegram_id}@telegram.local"
+        # 🧠 Ищем уже существующего пользователя по Telegram ID
+        user = User.objects.filter(telegram_id=telegram_id).first()
 
-        user, created = User.objects.get_or_create(
-            telegram_id=telegram_id,
-            defaults={
-                'username': username,
-                'email': email,
-                'is_active': True,
-            }
-        )
+        if not user:
+            # ⚠️ Если пользователь не найден по Telegram ID — ищем по cookie
+            client_token = request.COOKIES.get('client_token')
 
-        if created:
-            ClientProfile.objects.create(user=user, full_name=first_name)
+            if client_token:
+                consultation = QuickClientConsultationRequest.objects.filter(client_token=client_token).first()
+                if consultation:
+                    email_from_request = consultation.email or f"{telegram_id}@telegram.local"
+                    user = User.objects.filter(email=email_from_request).first()
 
+                    if user:
+                        user.telegram_id = telegram_id
+                        user.save()
+                        consultation.telegram_id = telegram_id
+                        consultation.save()
+
+        # 🔧 Если пользователя всё равно нет — можно отказать или создать
+        if not user:
+            return Response({"error": "Пользователь не найден. Сначала зарегистрируйтесь через email."}, status=404)
+
+        # ✅ Создаём токен
         refresh = RefreshToken.for_user(user)
+
+        # 🔔 Отправляем сообщение через бота
+        send_telegram_message(
+            telegram_id=telegram_id,
+            text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
+        )
 
         return Response({
             'access_token': str(refresh.access_token),
             'refresh_token': str(refresh),
             'user_id': user.id,
-            'message': "Авторизация успешна"
+            'message': "Telegram успешно привязан",
         })
+
 
 class TelegramAuthPageView(View):
     def get(self, request):
@@ -564,7 +583,6 @@ class ClientMeViewSet(viewsets.ViewSet):
     def destroy(self, request):
         logger.warning(f"Попытка удаления профиля пользователем {request.user.id}")
         return Response({"detail": "Удаление профиля запрещено."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-
 
 class PublicPsychologistProfileView(APIView):
     """

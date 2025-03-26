@@ -51,40 +51,29 @@ def matches_age(birth_date, preferred_age):
     return False
 
 async def get_psychologist_profile(telegram_id):
-    return await sync_to_async(PsychologistProfile.objects.get)(telegram_id=telegram_id)
+    return await sync_to_async(PsychologistProfile.objects.get)(user__telegram_id=telegram_id)
 
 async def get_client_profile(telegram_id):
-    return await sync_to_async(ClientProfile.objects.get)(telegram_id=telegram_id)
+    return await sync_to_async(ClientProfile.objects.get)(user__telegram_id=telegram_id)
 
 async def send_welcome_message(telegram_id):
     """Бот отправляет приветственное сообщение, когда получает Telegram ID"""
     await bot.send_message(telegram_id, "👋 Привет! Теперь я могу писать вам первым.")
 
-async def link_telegram_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Привязывает Telegram ID к существующему пользователю, если он уже зарегистрирован.
-    Если пользователя нет, создает нового клиента.
-    """
+async def link_telegram_user(update, context):
     telegram_id = update.effective_chat.id
     username = update.effective_chat.username or f"user_{telegram_id}"
 
-    # Проверяем, есть ли уже клиент с таким Telegram ID
     user = await sync_to_async(User.objects.filter(telegram_id=telegram_id).first)()
 
     if user:
-        await update.message.reply_text(" Вы уже привязаны к системе!")
+        await update.message.reply_text("✅ Вы уже привязаны к системе.")
     else:
-        # Создаём нового клиента
-        user = await sync_to_async(User.objects.create)(
-            telegram_id=telegram_id,
-            email=f"{telegram_id}@telegram.local",
-            username=username,
-            is_active=True,
+        await update.message.reply_text(
+            "👤 Мы не нашли вас в системе.\n"
+            "Если вы хотите пользоваться платформой как клиент или психолог, пожалуйста, зарегистрируйтесь: "
+            f"{settings.FRONTEND_URL}/register"
         )
-        await sync_to_async(ClientProfile.objects.create)(user=user, full_name=username)
-
-        await update.message.reply_text(" Ваш Telegram успешно привязан!")
-        await send_welcome_message(telegram_id)
 
 async def schedule_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Введите ID психолога для назначения сессии.")
@@ -155,7 +144,6 @@ async def notify_all_psychologists(consultation):
 
     for p in psychologists:
         await send_telegram_message(p.user.telegram_id, message)
-
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
@@ -254,10 +242,19 @@ async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
             review_submitted=False
         ).latest("end_time")
 
+        psychologist_name = session.psychologist.user.get_full_name() or session.psychologist.user.email
+
         text = update.message.text.strip()
         if text.isdigit() and 1 <= int(text) <= 5:
-            pending_reviews[telegram_id] = {"rating": int(text)}
-            await update.message.reply_text("Теперь введите текст отзыва.")
+            pending_reviews[telegram_id] = {
+                "rating": int(text),
+                "psychologist": psychologist_name,
+                "session_id": session.id
+            }
+            await update.message.reply_text(
+                f"📝 Теперь введите текст отзыва для психолога *{psychologist_name}*.",
+                parse_mode="Markdown"
+            )
         elif telegram_id in pending_reviews:
             rating = pending_reviews[telegram_id]["rating"]
             review = await sync_to_async(Review.objects.create)(
@@ -270,7 +267,7 @@ async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.review_submitted = True
             await sync_to_async(session.save)()
             del pending_reviews[telegram_id]
-            await update.message.reply_text("Спасибо! Ваш отзыв сохранён.")
+            await update.message.reply_text("Спасибо!❤️ Ваш отзыв сохранён.")
         else:
             await update.message.reply_text("Введите сначала число от 1 до 5.")
     except Session.DoesNotExist:
