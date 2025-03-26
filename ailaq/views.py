@@ -285,7 +285,6 @@ class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html')
 
-
 class VerifyTelegramView(APIView):
     """
     Привязка Telegram после входа.

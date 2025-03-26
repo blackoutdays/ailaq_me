@@ -1,10 +1,13 @@
 import logging
-import asyncio
+from datetime import datetime
 import os
 import django
 import nest_asyncio
 import requests
-
+from ailaq.models import QuickClientConsultationRequest
+from ailaq.telegram_bot import send_telegram_message
+from django.utils.timezone import now
+import asyncio
 nest_asyncio.apply()
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -31,6 +34,21 @@ logging.basicConfig(
 )
 
 User = get_user_model()
+pending_reviews = {}
+
+def matches_age(birth_date, preferred_age):
+    if not birth_date:
+        return False
+    age = (datetime.today().date() - birth_date).days // 365
+    if preferred_age == 'AGE_18_25':
+        return 18 <= age <= 25
+    elif preferred_age == 'AGE_26_35':
+        return 26 <= age <= 35
+    elif preferred_age == 'AGE_36_50':
+        return 36 <= age <= 50
+    elif preferred_age == 'AGE_50_PLUS':
+        return age > 50
+    return False
 
 async def get_psychologist_profile(telegram_id):
     return await sync_to_async(PsychologistProfile.objects.get)(telegram_id=telegram_id)
@@ -41,7 +59,6 @@ async def get_client_profile(telegram_id):
 async def send_welcome_message(telegram_id):
     """Бот отправляет приветственное сообщение, когда получает Telegram ID"""
     await bot.send_message(telegram_id, "👋 Привет! Теперь я могу писать вам первым.")
-
 
 async def link_telegram_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -107,6 +124,111 @@ async def process_session_request(update: Update, context: ContextTypes.DEFAULT_
     except ValueError:
         await update.message.reply_text("Ошибка: Telegram ID должен быть числом.")
 
+async def remind_review(consultation):
+    try:
+        client_profile = await get_client_profile(consultation.telegram_id)
+        text = (
+            f"🔔 Прошла ли сессия по заявке '{consultation.topic}'?\n"
+            f"Если прошла — оцените психолога. Если нет — мы напомним позже."
+        )
+        await send_telegram_message(consultation.telegram_id, text)
+    except Exception as e:
+        logging.error(f"Ошибка при напоминании отзыва: {e}")
+
+async def notify_all_psychologists(consultation):
+    from ailaq.telegram_bot import send_telegram_message
+    psychologists = PsychologistProfile.objects.filter(
+        user__telegram_id__isnull=False,
+        application__status='APPROVED'
+    )
+
+    message = (
+        f"🆕 Новая заявка на быструю консультацию\n"
+        f"Язык: {consultation.psychologist_language}\n"
+        f"Пол клиента: {consultation.gender}, возраст: {consultation.age}\n"
+        f"Предпочтения: психолог {consultation.psychologist_gender}, "
+        f"возраст: {consultation.preferred_psychologist_age}\n"
+        f"Тема: {consultation.topic}\n"
+        f"Комментарий: {consultation.comments}\n\n"
+        f"Если вы подходите по критериям — ответьте /accept_{consultation.id}"
+    )
+
+    for p in psychologists:
+        await send_telegram_message(p.user.telegram_id, message)
+
+
+async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message.text.strip()
+    chat_id = update.effective_chat.id
+
+    if not message.startswith("/accept_"):
+        return
+
+    try:
+        consultation_id = int(message.split("_", 1)[1])
+        consultation = await sync_to_async(QuickClientConsultationRequest.objects.get)(id=consultation_id)
+        if consultation.taken_by:
+            await update.message.reply_text("⛔ Заявка уже была принята другим психологом.")
+            return
+
+        psychologist = await get_psychologist_profile(chat_id)
+        app = psychologist.application
+
+        if not (
+            app.status == 'APPROVED' and
+            app.gender == consultation.psychologist_gender and
+            app.communication_language == consultation.psychologist_language and
+            matches_age(app.birth_date, consultation.preferred_psychologist_age)
+        ):
+            await update.message.reply_text("❌ Вы не подходите по критериям для этой заявки.")
+            return
+
+        client_profile = await get_client_profile(consultation.telegram_id)
+        await sync_to_async(Session.objects.create)(
+            psychologist=psychologist,
+            client=client_profile,
+            status="SCHEDULED",
+            start_time=now()
+        )
+
+        # Помечаем заявку как принятую этим психологом
+        consultation.taken_by = psychologist
+        await sync_to_async(consultation.save)()
+
+        # 🔹 Уведомляем психолога с данными клиента
+        await send_telegram_message(
+            psychologist.user.telegram_id,
+            f"✅ Вы приняли заявку от клиента: {consultation.client_name}\n"
+            f"📩 Telegram ID клиента: {consultation.telegram_id}\n"
+            f"👤 Возраст: {consultation.age}, Пол: {consultation.gender}\n"
+            f"🧠 Тема: {consultation.topic}\n"
+            f"💬 Комментарий: {consultation.comments}"
+        )
+
+        await send_telegram_message(
+            psychologist.user.telegram_id,
+            f"✅ Вы приняли заявку от клиента: {consultation.client_name}\n"
+            f"Telegram: {consultation.telegram_id}\n"
+            f"Тема: {consultation.topic}"
+        )
+        await send_telegram_message(
+            consultation.telegram_id,
+            "🤝 Вашу заявку принял психолог. Сессия скоро начнётся."
+        )
+        asyncio.get_event_loop().call_later(1800, lambda: asyncio.run(remind_review(consultation)))
+
+
+    except Exception as e:
+        await update.message.reply_text("⚠️ Ошибка принятия заявки. Возможно, она уже обработана.")
+        logging.error(str(e))
+
+
+    except QuickClientConsultationRequest.DoesNotExist:
+        await update.message.reply_text("⚠️ Заявка не найдена.")
+    except Exception as e:
+        logging.error(f"Ошибка: {e}")
+        await update.message.reply_text("⚠️ Ошибка принятия заявки.")
+
 async def leave_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Введите текст отзыва после завершения сессии.")
 
@@ -119,8 +241,6 @@ def notify_client_to_leave_review(session: Session):
         send_telegram_message(session.client.telegram_id, text)
         session.review_requested = True
         session.save()
-
-pending_reviews = {}
 
 async def process_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_chat.id
@@ -165,6 +285,7 @@ async def main() -> None:
     # Команды для клиентов
     application.add_handler(MessageHandler(filters.Regex("Назначить сессию"), schedule_session))
     application.add_handler(MessageHandler(filters.Regex("Оставить отзыв"), leave_review))
+    application.add_handler(MessageHandler(filters.Regex("^/accept_\\d+$"), accept_request))
 
     # Обработка ввода текста
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_session_request))

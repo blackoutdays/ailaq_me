@@ -182,6 +182,14 @@ class QuickClientConsultationRequest(models.Model):
     created_at = models.DateTimeField(default=now)
     telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID", editable=False)
 
+    taken_by = models.ForeignKey(
+        'PsychologistProfile',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='taken_consultations',
+        verbose_name="Принята психологом"
+    )
     def __str__(self):
         return f"Заявка от {self.client_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
