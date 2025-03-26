@@ -10,7 +10,6 @@ import asyncio
 nest_asyncio.apply()
 
 import requests
-from ailaq.telegram_bot import send_telegram_message
 from django.utils.timezone import now
 
 from ailaq.models import QuickClientConsultationRequest
