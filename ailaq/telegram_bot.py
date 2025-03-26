@@ -2,17 +2,18 @@ import logging
 from datetime import datetime
 import os
 import django
-import nest_asyncio
-import requests
-from ailaq.models import QuickClientConsultationRequest
-from ailaq.telegram_bot import send_telegram_message
-from django.utils.timezone import now
-import asyncio
-nest_asyncio.apply()
-
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
+import nest_asyncio
+import asyncio
+nest_asyncio.apply()
+
+import requests
+from ailaq.telegram_bot import send_telegram_message
+from django.utils.timezone import now
+
+from ailaq.models import QuickClientConsultationRequest
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from asgiref.sync import sync_to_async
