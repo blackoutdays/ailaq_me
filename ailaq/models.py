@@ -63,6 +63,7 @@ class CustomUser(AbstractBaseUser):
     """Кастомная модель пользователя с подтверждением email"""
     telegram_id = models.BigIntegerField(null=True, blank=True, unique=True, verbose_name="Telegram ID", editable=False)
     email = models.EmailField(unique=True, null=True, blank=True)
+    username = models.CharField(max_length=150, blank=True, null=True)
 
     verification_code = models.CharField(max_length=64, unique=True, null=True, blank=True)  # Токен для подтверждения
     verification_code_expiration = models.DateTimeField(null=True, blank=True)  # Срок действия кода
