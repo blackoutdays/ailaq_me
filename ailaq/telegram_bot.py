@@ -95,12 +95,12 @@ async def notify_psychologist_telegram(session_request):
         telegram_id = session_request.psychologist.user.telegram_id
         if not telegram_id:
             return
-
         text = (
-            f"📅 Новая заявка!"
-            f"👤 {session_request.client_name}, {session_request.age} лет, {session_request.gender}"
-            f"🧠 Тема: {session_request.topic}"
-            f"💬 {session_request.comments or '---'}"
+            f"📥 Новая заявка от клиента!\n"
+            f"👤 Имя: {session_request.client_name}\n"
+            f"🧠 Тема: {session_request.topic}\n"
+            f"📅 Возраст: {session_request.age}, Пол: {session_request.gender}\n"
+            f"💬 Комментарий: {session_request.comments or 'нет'}"
         )
 
         keyboard = InlineKeyboardMarkup([
@@ -421,7 +421,7 @@ async def main() -> None:
     # Обработка ввода текста
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_session_request))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_review))
-
+    application.add_handler(CallbackQueryHandler(handle_accept_callback))
     await application.run_polling()
 
 if __name__ == "__main__":
