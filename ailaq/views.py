@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import uuid
 from hashlib import sha256
@@ -44,7 +45,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 import telegram
 import logging
 
-from .telegram_bot import send_telegram_message, notify_psychologist_telegram
+from .telegram_bot import send_telegram_message, notify_psychologist_telegram, notify_all_psychologists
 from .models import PsychologistSessionRequest
 from .serializers import AnonymousSessionRequestSerializer, AuthenticatedSessionRequestSerializer
 
@@ -398,6 +399,8 @@ class QuickClientConsultationAPIView(APIView):
             telegram_id=user.telegram_id
         )
 
+        asyncio.create_task(notify_all_psychologists(consultation))
+
         response_serializer = QuickClientConsultationRequestSerializer(consultation)
         return Response({
             "message": "Заявка успешно создана.",
@@ -422,6 +425,8 @@ class QuickClientConsultationAnonymousAPIView(APIView):
         token = uuid.uuid4().hex
         consultation.client_token = token
         consultation.save()
+
+        asyncio.create_task(notify_all_psychologists(consultation))
 
         response_data = serializer.data
         response_data['client_token'] = token
@@ -470,7 +475,7 @@ class AuthenticatedPsychologistSessionRequestView(APIView):
             telegram_id=user.telegram_id
         )
 
-        notify_psychologist_telegram(session_request)
+        asyncio.create_task(notify_psychologist_telegram(session_request))
         return Response(serializer.data, status=201)
 
 class AnonymousPsychologistSessionRequestView(APIView):
@@ -492,8 +497,7 @@ class AnonymousPsychologistSessionRequestView(APIView):
         session_request.client_token = token
         session_request.save()
 
-        notify_psychologist_telegram(session_request)
-
+        asyncio.create_task(notify_psychologist_telegram(session_request))
         response_data = serializer.data
         response_data['client_token'] = token
         response = Response(response_data, status=201)

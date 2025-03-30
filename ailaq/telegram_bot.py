@@ -318,7 +318,6 @@ async def status_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         await update.message.reply_text("❗ Ошибка получения статуса заявки.")
 
-
 async def remind_clients_about_reviews():
     completed = PsychologistSessionRequest.objects.filter(status="COMPLETED", review_submitted=False)
     for session in completed:
