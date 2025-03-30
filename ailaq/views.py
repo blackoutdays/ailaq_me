@@ -401,8 +401,7 @@ class QuickClientConsultationAPIView(APIView):
             telegram_id=user.telegram_id
         )
 
-        asyncio.create_task(notify_all_psychologists(consultation))
-
+        async_to_sync(notify_all_psychologists)(consultation)
         response_serializer = QuickClientConsultationRequestSerializer(consultation)
         return Response({
             "message": "Заявка успешно создана.",
@@ -428,8 +427,7 @@ class QuickClientConsultationAnonymousAPIView(APIView):
         consultation.client_token = token
         consultation.save()
 
-        asyncio.create_task(notify_all_psychologists(consultation))
-
+        async_to_sync(notify_all_psychologists)(consultation)
         response_data = serializer.data
         response_data['client_token'] = token
 
