@@ -475,6 +475,24 @@ class PsychologistProfile(models.Model):
             )
             self.save(update_fields=["is_in_catalog"])
 
+    def update_requests_count(self):
+        from ailaq.models import PsychologistSessionRequest, QuickClientConsultationRequest
+
+        session_count = PsychologistSessionRequest.objects.filter(
+            psychologist=self,
+            status="COMPLETED"
+        ).count()
+
+        consultation_count = QuickClientConsultationRequest.objects.filter(
+            taken_by=self,
+            status="COMPLETED"
+        ).count()
+
+        self.requests_count = session_count + consultation_count
+        self.save(update_fields=["requests_count"])
+
+        self.update_catalog_visibility()
+
 def get_default_cost():
     return settings.REQUEST_COST
 
