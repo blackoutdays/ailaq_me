@@ -86,21 +86,29 @@ async def send_telegram_message(telegram_id, text):
     response.raise_for_status()
 
 async def notify_psychologist_telegram(session_request):
-    if not session_request.psychologist or not session_request.psychologist.user.telegram_id:
-        return
-
-    text = (
-        f"📥 Новая заявка от клиента!\n"
-        f"👤 Имя: {session_request.client_name}\n"
-        f"🧠 Тема: {session_request.topic}\n"
-        f"📅 Возраст: {session_request.age}, Пол: {session_request.gender}\n"
-        f"💬 Комментарий: {session_request.comments or 'нет'}"
-    )
-
     try:
-        await send_telegram_message(session_request.psychologist.user.telegram_id, text)
+        session_request = await sync_to_async(
+            lambda: PsychologistSessionRequest.objects.select_related("psychologist__user").get(id=session_request.id)
+        )()
+
+        telegram_id = session_request.psychologist.user.telegram_id
+        if not telegram_id:
+            return
+
+        text = (
+            f"📥 Новая заявка от клиента!\n"
+            f"👤 Имя: {session_request.client_name}\n"
+            f"🧠 Тема: {session_request.topic}\n"
+            f"📅 Возраст: {session_request.age}, Пол: {session_request.gender}\n"
+            f"💬 Комментарий: {session_request.comments or 'нет'}"
+        )
+
+        await send_telegram_message(telegram_id, text)
+
+    except PsychologistSessionRequest.DoesNotExist:
+        logging.error("❌ Заявка не найдена для отправки в Telegram.")
     except Exception as e:
-        logging.error(f"Ошибка отправки сообщения психологу: {e}")
+        logging.error(f"❌ Ошибка при уведомлении психолога: {e}")
 
 async def process_session_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     psychologist_id = update.message.text
