@@ -2,6 +2,8 @@ import asyncio
 import hmac
 import uuid
 from hashlib import sha256
+
+from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib.auth import get_user_model
@@ -475,7 +477,7 @@ class AuthenticatedPsychologistSessionRequestView(APIView):
             telegram_id=user.telegram_id
         )
 
-        asyncio.create_task(notify_psychologist_telegram(session_request))
+        async_to_sync(notify_psychologist_telegram)(session_request)
         return Response(serializer.data, status=201)
 
 class AnonymousPsychologistSessionRequestView(APIView):
@@ -497,7 +499,7 @@ class AnonymousPsychologistSessionRequestView(APIView):
         session_request.client_token = token
         session_request.save()
 
-        asyncio.create_task(notify_psychologist_telegram(session_request))
+        async_to_sync(notify_psychologist_telegram)(session_request)
         response_data = serializer.data
         response_data['client_token'] = token
         response = Response(response_data, status=201)
