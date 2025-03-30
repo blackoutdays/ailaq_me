@@ -11,7 +11,8 @@ nest_asyncio.apply()
 
 import requests
 from django.utils.timezone import now
-
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, ContextTypes
 from ailaq.models import QuickClientConsultationRequest, PsychologistSessionRequest
 from django.contrib.auth import get_user_model
 from django.conf import settings
@@ -96,19 +97,81 @@ async def notify_psychologist_telegram(session_request):
             return
 
         text = (
-            f"📥 Новая заявка от клиента!\n"
-            f"👤 Имя: {session_request.client_name}\n"
-            f"🧠 Тема: {session_request.topic}\n"
-            f"📅 Возраст: {session_request.age}, Пол: {session_request.gender}\n"
-            f"💬 Комментарий: {session_request.comments or 'нет'}"
+            f"📅 Новая заявка!"
+            f"👤 {session_request.client_name}, {session_request.age} лет, {session_request.gender}"
+            f"🧠 Тема: {session_request.topic}"
+            f"💬 {session_request.comments or '---'}"
         )
 
-        await send_telegram_message(telegram_id, text)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Принять", callback_data=f"accept_session_{session_request.id}")]
+        ])
 
-    except PsychologistSessionRequest.DoesNotExist:
-        logging.error("❌ Заявка не найдена для отправки в Telegram.")
+        await bot.send_message(
+            chat_id=telegram_id,
+            text=text,
+            reply_markup=keyboard
+        )
+
     except Exception as e:
-        logging.error(f"❌ Ошибка при уведомлении психолога: {e}")
+        logging.error(f"❌ Ошибка уведомления психолога: {e}")
+
+
+# Callback-хендлер для обработки "Принято"
+async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    if not data.startswith("accept_session_"):
+        return
+
+    session_id = int(data.split("_")[-1])
+    try:
+        session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(id=session_id)
+
+        # Уже принято
+        if session.taken_by:
+            await bot.edit_message_reply_markup(
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id,
+                reply_markup=None
+            )
+            await bot.send_message(
+                chat_id=query.from_user.id,
+                text="⛔️ Эта заявка уже была принята другим психологом."
+            )
+            return
+
+        # Помечаем заявку
+        session.taken_by = session.psychologist
+        session.status = "CONTACTED"
+        await sync_to_async(session.save)()
+
+        # Скрыть кнопку и обновить текст
+        new_text = query.message.text + "\n\n🎉 Заявка принята!"
+        await bot.edit_message_text(
+            chat_id=query.message.chat_id,
+            message_id=query.message.message_id,
+            text=new_text,
+            parse_mode="Markdown"
+        )
+
+        # Сенд данные клиента
+        await bot.send_message(
+            chat_id=query.from_user.id,
+            text=(
+                f"📢 Вы приняли заявку!"
+                f"👤 Клиент: {session.client_name}"
+                f"🌐 Telegram ID: {session.telegram_id}"
+                f"🧠 Тема: {session.topic}"
+                f"💬 {session.comments or 'нет'}"
+            )
+        )
+
+    except Exception as e:
+        logging.error(f"❌ Ошибка в callback accept_session: {e}")
+        await query.message.reply_text("⚠️ Ошибка при принятии заявки")
 
 async def process_session_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     psychologist_id = update.message.text
