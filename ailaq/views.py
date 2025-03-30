@@ -679,8 +679,8 @@ class PublicFAQView(APIView):
 
 class PsychologistOnlyAPIView(APIView):
     """
-    Базовый класс для всех вьюх психолога.
-    Запрещает доступ клиентам (у которых есть client_profile и нет is_psychologist).
+    Доступ только для авторизованных пользователей,
+    которые при регистрации указали, что хотят быть психологами.
     """
     permission_classes = [IsAuthenticated]
 
@@ -690,11 +690,10 @@ class PsychologistOnlyAPIView(APIView):
         if not user.is_authenticated:
             raise PermissionDenied("Необходима авторизация.")
 
-        if hasattr(user, 'client_profile') and not user.wants_to_be_psychologist:
-            raise PermissionDenied("Клиенты не имеют доступа к разделу психолога.")
+        if not user.wants_to_be_psychologist:
+            raise PermissionDenied("Доступ разрешён только для пользователей, выбравших роль психолога.")
 
         return super().dispatch(request, *args, **kwargs)
-
 
 # Получение профиля психолога
 class PsychologistSelfProfileView(PsychologistOnlyAPIView):
