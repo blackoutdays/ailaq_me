@@ -8,12 +8,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from ailaq.views import (
     LoginView, RegisterUserView, AdminApprovePsychologistView, PsychologistProfileView,
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
-    ReviewListView, TelegramAuthView, VerifyTelegramView, CatalogViewSet, ServicePriceView, ScheduleSessionView,
+    ReviewListView, TelegramAuthView, VerifyTelegramView, CatalogViewSet, ServicePriceView,
     PublicPsychologistProfileView,
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
-    PsychologistSessionView, ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
+    ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
     QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView,
-    TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView, PsychologistChangePasswordView
+    TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView, PsychologistChangePasswordView,
+    AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView
 )
 
 router = DefaultRouter()
@@ -63,7 +64,6 @@ urlpatterns = [
     path('api/psychologist/profile/service_price/', ServicePriceView.as_view(), name='service-price'),
     path('api/psychologist/profile/faq/', FAQView.as_view(), name='faq'),
     path('api/psychologist/profile/documents/', DocumentView.as_view(), name='documents'),
-    path('api/psychologist/sessions/', PsychologistSessionView.as_view(), name='psychologist-sessions'),
 
     # Каталог и одобрение психологов
     path('api/admin/approve-psychologist/<int:psychologist_id>/', AdminApprovePsychologistView.as_view(), name='admin_approve_psychologist'),
@@ -78,13 +78,14 @@ urlpatterns = [
 
     #  Запись на быструю консультацию (только для зарегистрированных пользователей)
     path("api/quick-consultation/", QuickClientConsultationAPIView.as_view(), name="quick_consultation"),
-
     path('api/quick-consultation-anonymous/', QuickClientConsultationAnonymousAPIView.as_view()),
     path('api/auth/telegram/link-consultation/', TelegramAuthLinkConsultationAPIView.as_view()),
 
+    # Заявки психолога
+    path('api/session-request/authenticated/', AuthenticatedPsychologistSessionRequestView.as_view(), name='session-authenticated'),
+    path('api/session-request/anonymous/', AnonymousPsychologistSessionRequestView.as_view(), name='session-anonymous'),
+
     # Запись на сеанс
-    path('api/sessions/schedule/', ScheduleSessionView.as_view(), name='schedule-session'),
-    path('sessions/schedule/<int:session_id>/', ScheduleSessionView.as_view(), name='cancel_session'),
 
     path('telegram-auth/', TelegramAuthPageView.as_view(), name='telegram-auth-page'),
 

@@ -4,7 +4,7 @@ from typing import Optional
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
-    Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument, Session
+    Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument, PsychologistSessionRequest
 from hashlib import sha256
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
@@ -28,7 +28,7 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['email', 'password', 'password_confirm', 'wants_to_be_psychologist']  # Исправлено поле
+        fields = ['email', 'password', 'password_confirm', 'wants_to_be_psychologist']
 
     def validate(self, data):
         if data['password'] != data['password_confirm']:
@@ -247,6 +247,16 @@ class QuickClientConsultationAnonymousSerializer(serializers.ModelSerializer):
             if not data.get(field):
                 raise serializers.ValidationError({field: "Это поле обязательно."})
         return data
+
+class AuthenticatedSessionRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistSessionRequest
+        fields = ["psychologist", "topic", "comments"]
+
+class AnonymousSessionRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistSessionRequest
+        fields = ["psychologist", "client_name", "age", "gender", "topic", "comments"]
 
 # Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):
@@ -570,98 +580,3 @@ class BuyRequestSerializer(serializers.ModelSerializer):
 
 class EmptySerializer(serializers.Serializer):
     pass
-
-class SessionSerializer(serializers.ModelSerializer):
-    psychologist_name = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Session
-        fields = ['id', 'psychologist_name', 'start_time', 'status']
-
-    def get_psychologist_name(self, obj):
-        """ Получает имя психолога из `PsychologistApplication` """
-        if obj.psychologist and hasattr(obj.psychologist, 'application'):
-            application = obj.psychologist.application
-            full_name = f"{application.first_name_ru or ''} {application.last_name_ru or ''}".strip()
-            return full_name if full_name else "Неизвестный психолог"
-        return "Неизвестный психолог"
-
-class SessionCreateSerializer(serializers.ModelSerializer):
-    """
-    Сериализатор для создания записи на сессию.
-    Пользователь передаёт день/месяц/год/часы/минуты,
-    а в create() мы собираем это в один DateTimeField (start_time).
-    """
-    day = serializers.IntegerField(min_value=1, max_value=31, required=True, write_only=True)
-    month = serializers.IntegerField(min_value=1, max_value=12, required=True, write_only=True)
-    year = serializers.IntegerField(min_value=2023, max_value=2100, required=True, write_only=True)
-    hour = serializers.IntegerField(min_value=0, max_value=23, required=True, write_only=True)
-    minute = serializers.IntegerField(min_value=0, max_value=59, required=True, write_only=True)
-
-    class Meta:
-        model = Session
-        fields = [
-            'id',
-            'psychologist',
-            'day',
-            'month',
-            'year',
-            'hour',
-            'minute',
-            'status',
-            'start_time',
-        ]
-        read_only_fields = ['status', 'start_time']
-
-    def validate(self, attrs):
-        """
-        Собираем дату-время в один объект datetime.
-        Проверяем, что это не прошлая дата.
-        """
-        day = attrs['day']
-        month = attrs['month']
-        year = attrs['year']
-        hour = attrs['hour']
-        minute = attrs['minute']
-
-        try:
-            proposed_dt = datetime(year, month, day, hour, minute)
-            proposed_dt = timezone.make_aware(proposed_dt)  # Делаем дату "offset-aware"
-        except ValueError:
-            raise serializers.ValidationError("Некорректная дата или время.")
-
-        if proposed_dt < timezone.now():
-            raise serializers.ValidationError("Нельзя записаться на прошедшее время.")
-
-        # Сохраняем объект datetime для дальнейшего использования в create()
-        attrs['proposed_dt'] = proposed_dt
-        return attrs
-
-    def create(self, validated_data):
-        """
-        Создаём Session c полем start_time=proposed_dt и status=SCHEDULED.
-        Поле client берётся из авторизованного пользователя.
-        """
-        request = self.context.get('request')
-        if not request or not request.user or not request.user.is_authenticated:
-            raise serializers.ValidationError("Пользователь не авторизован.")
-
-        proposed_dt = validated_data.pop('proposed_dt')
-
-        # Убираем из validated_data поля, которых нет в модели
-        for remove_field in ['day', 'month', 'year', 'hour', 'minute']:
-            validated_data.pop(remove_field, None)
-
-        # Получаем профиль клиента
-        try:
-            client_profile = request.user.client_profile
-        except ClientProfile.DoesNotExist:
-            raise serializers.ValidationError("У авторизованного пользователя нет профиля клиента.")
-
-        session_obj = Session.objects.create(
-            client=client_profile,
-            start_time=proposed_dt,
-            status='SCHEDULED',
-            **validated_data
-        )
-        return session_obj

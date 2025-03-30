@@ -27,12 +27,12 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParamet
 from config import settings
 from .emails import send_rejection_email, send_approval_email
 from .models import PsychologistProfile, PsychologistApplication, ClientProfile, CustomUser, \
-    PsychologistFAQ, Review, Session, QuickClientConsultationRequest, Topic, EducationDocument
+    PsychologistFAQ, Review, QuickClientConsultationRequest, Topic, EducationDocument
 from .serializers import (
     LoginSerializer, PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
     PersonalInfoSerializer, QualificationSerializer, DocumentSerializer,
     FAQListSerializer, TopicSerializer,
-    ServicePriceSerializer, SessionCreateSerializer, SessionSerializer, PsychologistProfileSerializer
+    ServicePriceSerializer, PsychologistProfileSerializer
 )
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
@@ -42,7 +42,9 @@ from rest_framework.parsers import MultiPartParser, FormParser
 import telegram
 import logging
 
-from .telegram_bot import send_telegram_message
+from .telegram_bot import send_telegram_message, notify_psychologist_telegram
+from .models import PsychologistSessionRequest
+from .serializers import AnonymousSessionRequestSerializer, AuthenticatedSessionRequestSerializer
 
 logger = logging.getLogger(__name__)
 logger = logging.getLogger("telegram_auth")
@@ -215,8 +217,35 @@ class LoginView(APIView):
                 "message": "Вход выполнен успешно.",
                 "access_token": str(refresh.access_token),
                 "refresh_token": str(refresh),
-                "telegram_linked": bool(user.telegram_id)
+                "telegram_linked": bool(user.telegram_id),
+                "role": user.role
             }, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Смена пароля",
+        description="Позволяет сменить пароль, указав текущий пароль.",
+        request=ChangePasswordSerializer,
+        responses={200: {"message": "Пароль успешно изменен"}},
+    )
+    def post(self, request):
+        serializer = self.ChangePasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user = request.user
+
+            # Проверяем текущий пароль
+            if not user.check_password(serializer.validated_data["current_password"]):
+                return Response({"error": "Неверный текущий пароль."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Устанавливаем новый пароль
+            user.set_password(serializer.validated_data["new_password"])
+            user.save()
+
+            return Response({"message": "Пароль успешно изменен."}, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -299,7 +328,6 @@ class TelegramAuthView(APIView):
             'message': "Telegram успешно привязан",
         })
 
-
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html')
@@ -335,7 +363,7 @@ class QuickClientConsultationAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        tags=["Клиент - быстрая консультация"],
+        tags=["Клиент - консультация"],
         summary="Быстрая консультация для зарегистрированных клиентов",
         request=AuthenticatedQuickClientConsultationRequestSerializer,
         responses={201: QuickClientConsultationRequestSerializer},
@@ -378,8 +406,8 @@ class QuickClientConsultationAnonymousAPIView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        tags=["Клиент - быстрая консультация"],
-        summary="Создание заявки на консультацию (без Telegram, без аккаунта)",
+        tags=["Клиент - консультация"],
+        summary="Быстрая консультация для незарегистрированных клиентов)",
         request=QuickClientConsultationAnonymousSerializer,
         responses={201: QuickClientConsultationAnonymousSerializer},
     )
@@ -404,6 +432,70 @@ class QuickClientConsultationAnonymousAPIView(APIView):
         # Сохраняем токен в cookie (опционально)
         response.set_cookie("client_token", token, httponly=True, max_age=86400)
 
+        return response
+
+class AuthenticatedPsychologistSessionRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Клиент - консультация"],
+        summary="Заявка к выбранному психологу (авторизован)",
+        request=AuthenticatedSessionRequestSerializer,
+        responses={201: AuthenticatedSessionRequestSerializer}
+    )
+    def post(self, request):
+        user = request.user
+        if not hasattr(user, "client_profile") or not user.telegram_id:
+            return Response({"error": "Профиль клиента или Telegram не найден."}, status=400)
+
+        profile = user.client_profile
+        data = request.data.copy()
+        data.update({
+            "client_name": profile.full_name,
+            "age": profile.age,
+            "gender": profile.gender,
+            "telegram_id": user.telegram_id
+        })
+
+        serializer = AuthenticatedSessionRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        session_request = PsychologistSessionRequest.objects.create(
+            **serializer.validated_data,
+            client=profile,
+            client_name=profile.full_name,
+            age=profile.age,
+            gender=profile.gender,
+            telegram_id=user.telegram_id
+        )
+
+        notify_psychologist_telegram(session_request)
+        return Response(serializer.data, status=201)
+
+class AnonymousPsychologistSessionRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Клиент - консультация"],
+        summary="Заявка к выбранному психологу (без регистрации)",
+        request=AnonymousSessionRequestSerializer,
+        responses={201: AnonymousSessionRequestSerializer}
+    )
+    def post(self, request):
+        serializer = AnonymousSessionRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        session_request = serializer.save()
+
+        # Генерация токена и установка в куки
+        token = uuid.uuid4().hex
+        session_request.client_token = token
+        session_request.save()
+
+        notify_psychologist_telegram(session_request)
+
+        response_data = serializer.data
+        response_data['client_token'] = token
+        response = Response(response_data, status=201)
+        response.set_cookie("client_token", token, httponly=True, max_age=86400)
         return response
 
 class TelegramAuthLinkConsultationAPIView(APIView):
@@ -680,7 +772,7 @@ class PublicFAQView(APIView):
 # Получение профиля психолога
 class PsychologistSelfProfileView(APIView):
     """
-    🔹 API для получения и редактирования личного профиля психолога
+    API для получения и редактирования личного профиля психолога
     """
     permission_classes = [IsAuthenticated]
 
@@ -1100,10 +1192,10 @@ class ReviewCreateView(APIView):
             return Response({"error": "Рейтинг должен быть от 1 до 5."}, status=400)
 
         try:
-            session = Session.objects.filter(
+            session = PsychologistSessionRequest.objects.filter(
                 client=client, status="COMPLETED", review_submitted=False
             ).latest("end_time")
-        except Session.DoesNotExist:
+        except PsychologistSessionRequest.DoesNotExist:
             return Response({"error": "У вас нет завершённой сессии для отзыва."}, status=400)
 
         review = Review.objects.create(
@@ -1118,72 +1210,6 @@ class ReviewCreateView(APIView):
         session.save()
 
         return Response(ReviewSerializer(review).data, status=201)
-
-class PsychologistSessionView(APIView):
-    """
-    🔹 Психолог может видеть список всех записей клиентов к нему.
-    """
-    permission_classes = [IsAuthenticated]
-
-    class CustomPagination(PageNumberPagination):
-        page_size = 10  # Устанавливаем размер страницы
-
-    @extend_schema(
-        tags=["Психолог"],
-        summary="Получить список записей клиентов к психологу",
-        description="Позволяет психологу увидеть всех клиентов, которые записались к нему, включая дату, время и статус сеанса.",
-        responses={
-            200: OpenApiResponse(response=SessionSerializer(many=True), description="Список записей клиентов"),
-            403: OpenApiResponse(description="Вы не зарегистрированы как психолог."),
-        },
-    )
-    def get(self, request):
-        """
-        🔹 Получение всех записей клиентов к текущему психологу с пагинацией.
-        """
-        try:
-            psychologist_profile = request.user.psychologist_profile
-        except PsychologistProfile.DoesNotExist:
-            return Response(
-                {"error": "Вы не зарегистрированы как психолог."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        # Получаем все сессии, где психолог - текущий пользователь
-        sessions = Session.objects.filter(psychologist=psychologist_profile).order_by('start_time')
-
-        # Применяем пагинацию
-        paginator = self.CustomPagination()
-        paginated_sessions = paginator.paginate_queryset(sessions, request, view=self)
-        serializer = SessionSerializer(paginated_sessions, many=True)
-
-        return paginator.get_paginated_response(serializer.data)
-
-class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        summary="Смена пароля",
-        description="Позволяет сменить пароль, указав текущий пароль.",
-        request=ChangePasswordSerializer,
-        responses={200: {"message": "Пароль успешно изменен"}},
-    )
-    def post(self, request):
-        serializer = self.ChangePasswordSerializer(data=request.data)
-        if serializer.is_valid():
-            user = request.user
-
-            # Проверяем текущий пароль
-            if not user.check_password(serializer.validated_data["current_password"]):
-                return Response({"error": "Неверный текущий пароль."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Устанавливаем новый пароль
-            user.set_password(serializer.validated_data["new_password"])
-            user.save()
-
-            return Response({"message": "Пароль успешно изменен."}, status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AdminApprovePsychologistView(GenericAPIView):
     queryset = PsychologistApplication.objects.all()
@@ -1267,187 +1293,4 @@ class TopicListView(APIView):
         topics = Topic.objects.all()
         serializer = TopicSerializer(topics, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
-class ScheduleSessionView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """
-        🔹 Получение всех записей клиента
-        """
-        try:
-            client_profile = request.user.client_profile
-        except ClientProfile.DoesNotExist:
-            logger.error(f"ScheduleSessionView: User {request.user.id} is not a client.")
-            return Response(
-                {"error": "Только клиент может просматривать свои записи."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        sessions = Session.objects.filter(client=client_profile).order_by('start_time')
-        serializer = SessionSerializer(sessions, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def post(self, request):
-        """
-        🔹 Запись клиента на сеанс
-        """
-        try:
-            client_profile = request.user.client_profile
-        except ClientProfile.DoesNotExist:
-            logger.error(f"ScheduleSessionView: User {request.user.id} is not a client.")
-            return Response(
-                {"error": "Только клиент может записываться на сеанс."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        data = request.data.copy()
-        psychologist_id = data.get("psychologist")
-
-        if not psychologist_id:
-            return Response({"error": "Параметр 'psychologist' (ID) обязателен."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        psychologist_profile = get_object_or_404(PsychologistProfile, pk=psychologist_id)
-
-        if not psychologist_profile.user.is_psychologist:
-            return Response({"error": "Данный пользователь не является психологом."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        if not psychologist_profile.is_verified:
-            return Response({"error": "Психолог не верифицирован."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Парсим дату и время
-        try:
-            session_time = make_aware(datetime(
-                int(data["year"]), int(data["month"]), int(data["day"]),
-                int(data["hour"]), int(data["minute"])
-            ))
-        except (ValueError, KeyError):
-            return Response({"error": "Некорректные данные даты или времени."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Проверка на занятость времени
-        existing_session = Session.objects.filter(
-            psychologist=psychologist_profile,
-            start_time=session_time,
-            status__in=["scheduled", "in_progress"]
-        ).exists()
-
-        if existing_session:
-            return Response({"error": "Это время уже занято у психолога."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Создание записи
-        serializer = SessionCreateSerializer(data=data, context={'request': request})
-        if serializer.is_valid():
-            session_obj = serializer.save()
-            logger.info(f"Session #{session_obj.id} created (client {client_profile.pk}, psych {psychologist_id}).")
-
-            self.notify_client(client_profile, session_obj)
-            self.notify_psychologist(psychologist_profile, session_obj)
-
-            return Response(SessionCreateSerializer(session_obj).data, status=status.HTTP_201_CREATED)
-
-        logger.error(f"SessionCreateSerializer invalid: {serializer.errors}")
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, session_id):
-        """
-        🔹 Клиент может отменить свою запись
-        """
-        try:
-            client_profile = request.user.client_profile
-        except ClientProfile.DoesNotExist:
-            return Response({"error": "Только клиент может отменять свои записи."},
-                            status=status.HTTP_403_FORBIDDEN)
-
-        session = get_object_or_404(Session, id=session_id, client=client_profile)
-
-        if session.status not in ["scheduled", "pending"]:
-            return Response({"error": "Нельзя отменить сеанс, который уже прошел или находится в процессе."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        session.status = "canceled"
-        session.save()
-
-        # Уведомляем клиента
-        self.notify_cancellation(client_profile, session)
-
-        return Response({"message": "Запись отменена."}, status=status.HTTP_200_OK)
-
-    def notify_client(self, client_profile, session_obj):
-        """🔹 Уведомление клиента через Telegram и Email"""
-        telegram_id = getattr(client_profile.user, 'telegram_id', None)
-        if telegram_id:
-            try:
-                bot.send_message(
-                    chat_id=telegram_id,
-                    text=f"Вы записаны на сеанс #{session_obj.id} (время: {session_obj.start_time})."
-                )
-            except Exception as e:
-                logger.error(f"Ошибка при отправке уведомления клиенту в Telegram: {str(e)}")
-
-        email = client_profile.user.email
-        if email:
-            subject = "Запись на сеанс"
-            body = (
-                f"Вы успешно записались на сеанс #{session_obj.id}!\n"
-                f"Дата/время: {session_obj.start_time}\n"
-                f"Статус: {session_obj.status}\n\n"
-                "С уважением,\nВаша компания."
-            )
-            send_email_async.delay(subject, body, [email])
-
-    def notify_psychologist(self, psychologist_profile, session_obj):
-        """🔹 Уведомление психолога через Telegram и Email"""
-        telegram_id = getattr(psychologist_profile.user, 'telegram_id', None)
-        if telegram_id:
-            try:
-                bot.send_message(
-                    chat_id=telegram_id,
-                    text=(
-                        f"Новая запись на сеанс #{session_obj.id} "
-                        f"от клиента #{session_obj.client.pk}.\n"
-                        f"Время: {session_obj.start_time}."
-                    )
-                )
-            except Exception as e:
-                logger.error(f"Ошибка при отправке уведомления психологу в Telegram: {str(e)}")
-
-        email = psychologist_profile.user.email
-        if email:
-            subject = "Новая запись на сеанс"
-            body = (
-                f"У вас новая запись (Session #{session_obj.id})!\n"
-                f"От клиента: #{session_obj.client.pk}.\n"
-                f"Дата/время: {session_obj.start_time}\n"
-                f"Статус: {session_obj.status}\n\n"
-                "С уважением,\nВаша компания."
-            )
-            send_email_async.delay(subject, body, [email])
-
-    def notify_cancellation(self, client_profile, session_obj):
-        """🔹 Уведомление клиента об отмене записи"""
-        telegram_id = getattr(client_profile.user, 'telegram_id', None)
-        if telegram_id:
-            try:
-                bot.send_message(
-                    chat_id=telegram_id,
-                    text=f"Ваша запись #{session_obj.id} отменена."
-                )
-            except Exception as e:
-                logger.error(f"Ошибка при отправке уведомления клиенту в Telegram: {str(e)}")
-
-        email = client_profile.user.email
-        if email:
-            subject = "Отмена записи"
-            body = (
-                f"Ваша запись #{session_obj.id} отменена.\n"
-                f"Дата/время: {session_obj.start_time}\n"
-                f"Статус: отменена.\n\n"
-                "С уважением,\nВаша компания."
-            )
-            send_email_async.delay(subject, body, [email])
 

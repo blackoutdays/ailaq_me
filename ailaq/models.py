@@ -3,6 +3,7 @@ from django.utils.crypto import get_random_string
 from django.utils.timezone import now
 from django.db.models import Avg
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 import logging
@@ -153,46 +154,6 @@ class Topic(models.Model):
 
     def __str__(self):
         return self.name
-
-class QuickClientConsultationRequest(models.Model):
-    client_name = models.CharField(max_length=255, verbose_name="Как к вам обращаться?")
-    age = models.PositiveIntegerField(null=True, blank=True, verbose_name="Возраст")
-    gender = models.CharField(
-        max_length=10,
-        choices=[(tag.name, tag.value) for tag in ClientGenderEnum],
-        verbose_name="Пол клиента"
-    )
-    preferred_psychologist_age = models.CharField(
-        max_length=20,
-        choices=[(tag.name, tag.value) for tag in PsychologistAgeEnum],
-        verbose_name="Возраст специалиста"
-    )
-    psychologist_gender = models.CharField(
-        max_length=10,
-        choices=[(tag.name, tag.value) for tag in PreferredPsychologistGenderEnum],
-        verbose_name="Пол специалиста"
-    )
-    psychologist_language = models.CharField(
-        max_length=10,
-        choices=[(tag.name, tag.value) for tag in CommunicationLanguageEnum],
-        verbose_name="Язык общения"
-    )
-    topic = models.CharField(max_length=255, verbose_name="Тема")
-    comments = models.TextField(verbose_name="Комментарий")
-    client_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
-    created_at = models.DateTimeField(default=now)
-    telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID", editable=False)
-
-    taken_by = models.ForeignKey(
-        'PsychologistProfile',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='taken_consultations',
-        verbose_name="Принята психологом"
-    )
-    def __str__(self):
-        return f"Заявка от {self.client_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
 class PsychologistLevel(models.Model):
     name = models.CharField(max_length=50)
@@ -531,78 +492,62 @@ def save(self, *args, **kwargs):
     if self.pk and (old_status is None or old_status == "PENDING") and self.status == "APPROVED":
         PsychologistProfile.process_psychologist_application(self.id)
 
-class PurchasedRequest(models.Model):
-    psychologist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    cost = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=get_default_cost
-    )
-    created_at = models.DateTimeField(default=now)
-
-    def __str__(self):
-        return f"Purchase #{self.id} by {self.psychologist.email} on {self.created_at}"
-
-class Session(models.Model):
-    STATUS_CHOICES = [
-        ('SCHEDULED', 'Scheduled'),
-        ('COMPLETED', 'Completed'),
-        ('CANCELED', 'Canceled'),
-    ]
-
-    psychologist = models.ForeignKey(
-        PsychologistProfile,
-        on_delete=models.CASCADE,
-        related_name='sessions'
-    )
-    client = models.ForeignKey(
-        ClientProfile,
-        on_delete=models.CASCADE,
-        related_name='sessions'
-    )
-    review_requested = models.BooleanField(default=False)
-    review_submitted = models.BooleanField(default=False)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=10, choices=[('SCHEDULED', 'Scheduled'), ('COMPLETED', 'Completed'), ('CANCELED', 'Canceled')], default='SCHEDULED')
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Session #{self.pk} [{self.status}]"
+# class PurchasedRequest(models.Model):
+#     psychologist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+#     cost = models.DecimalField(
+#         max_digits=10,
+#         decimal_places=2,
+#         default=get_default_cost
+#     )
+#     created_at = models.DateTimeField(default=now)
+#
+#     def __str__(self):
+#         return f"Purchase #{self.id} by {self.psychologist.email} on {self.created_at}"
 
 # отзыв за проведенную сессию
 class Review(models.Model):
-    session = models.OneToOneField(
-        Session,
-        on_delete=models.CASCADE,
-        related_name='review'
+    consultation_request = models.OneToOneField(
+        'ailaq.QuickClientConsultationRequest', null=True, blank=True,
+        on_delete=models.CASCADE, related_name='review'
     )
-    client = models.ForeignKey(
-        ClientProfile,
-        on_delete=models.CASCADE,
-        related_name='reviews'
+    session_request = models.OneToOneField(
+        'ailaq.PsychologistSessionRequest', null=True, blank=True,
+        on_delete=models.CASCADE, related_name='review'
     )
-    psychologist = models.ForeignKey(
-        PsychologistProfile,
-        on_delete=models.CASCADE,
-        related_name='reviews'
-    )
-    client_name = models.CharField(max_length=255)  # ФИО клиента
-    psychologist_name = models.CharField(max_length=255)  # ФИО психолога
-    rating = models.PositiveIntegerField(default=0)  # Рейтинг от 1 до 5
-    text = models.TextField(null=True, blank=True)  # Текст отзыва
-    created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"Review by {self.client_name or 'Unknown'} for {self.psychologist_name or 'Unknown'} (Rating: {self.rating})"
+    client_name = models.CharField(max_length=255)
+    psychologist_name = models.CharField(max_length=255)
+    rating = models.PositiveIntegerField(default=0)
+    text = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(default=now)
+
+    def clean(self):
+        if not self.consultation_request and not self.session_request:
+            raise ValidationError("Нужно указать хотя бы одну заявку")
+        if self.consultation_request and self.session_request:
+            raise ValidationError("Можно указать только одну заявку")
 
     def save(self, *args, **kwargs):
         if not self.client_name:
-            self.client_name = self.client.full_name
+            if self.consultation_request:
+                self.client_name = self.consultation_request.client_name
+            elif self.session_request:
+                self.client_name = self.session_request.client_name
+
         if not self.psychologist_name:
-            self.psychologist_name = self.psychologist.user.get_full_name()
+            psy = None
+            if self.consultation_request:
+                psy = self.consultation_request.taken_by
+            elif self.session_request:
+                psy = self.session_request.taken_by or self.session_request.psychologist
+
+            self.psychologist_name = psy.user.get_full_name() if psy else "Психолог"
+
+        self.full_clean()
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Review by {self.client_name} for {self.psychologist_name} ({self.rating})"
 
 class Specialization(models.Model):
     name = models.CharField(max_length=255)
@@ -640,3 +585,74 @@ class BuyRequest(models.Model):
 
             # Обновляем видимость психолога в каталоге
             self.psychologist.update_catalog_visibility()
+
+
+class QuickClientConsultationRequest(models.Model):
+    client_name = models.CharField(max_length=255, verbose_name="Как к вам обращаться?")
+    age = models.PositiveIntegerField(null=True, blank=True, verbose_name="Возраст")
+    gender = models.CharField(
+        max_length=10,
+        choices=[(tag.name, tag.value) for tag in ClientGenderEnum],
+        verbose_name="Пол клиента"
+    )
+    preferred_psychologist_age = models.CharField(
+        max_length=20,
+        choices=[(tag.name, tag.value) for tag in PsychologistAgeEnum],
+        verbose_name="Возраст специалиста"
+    )
+    psychologist_gender = models.CharField(
+        max_length=10,
+        choices=[(tag.name, tag.value) for tag in PreferredPsychologistGenderEnum],
+        verbose_name="Пол специалиста"
+    )
+    psychologist_language = models.CharField(
+        max_length=10,
+        choices=[(tag.name, tag.value) for tag in CommunicationLanguageEnum],
+        verbose_name="Язык общения"
+    )
+    topic = models.CharField(max_length=255, verbose_name="Тема")
+    comments = models.TextField(verbose_name="Комментарий")
+    client_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    created_at = models.DateTimeField(default=now)
+    telegram_id = models.BigIntegerField(null=True, blank=True, verbose_name="Telegram ID", editable=False)
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Ожидает'),
+        ('CONTACTED', 'Психолог связался'),
+        ('COMPLETED', 'Сессия проведена'),
+        ('CANCELED', 'Отменена'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+
+    taken_by = models.ForeignKey(
+        'PsychologistProfile',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='taken_consultations',
+        verbose_name="Принята психологом"
+    )
+    def __str__(self):
+        return f"Заявка от {self.client_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+
+class PsychologistSessionRequest(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Ожидает'),
+        ('CONTACTED', 'Психолог связался'),
+        ('COMPLETED', 'Сессия проведена'),
+        ('CANCELED', 'Отменена'),
+    ]
+
+    psychologist = models.ForeignKey('ailaq.PsychologistProfile', on_delete=models.CASCADE)
+    client_name = models.CharField(max_length=255)
+    age = models.PositiveIntegerField()
+    gender = models.CharField(max_length=10)
+    telegram_id = models.CharField(max_length=100)
+    topic = models.CharField(max_length=255)
+    comments = models.TextField(blank=True)
+    taken_by = models.ForeignKey("ailaq.PsychologistProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name='taken_requests')
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+
+    def __str__(self):
+        return f"Заявка от {self.client_name} ({self.get_status_display()})"
