@@ -9,6 +9,8 @@ from rest_framework.exceptions import NotFound, ValidationError, PermissionDenie
 from rest_framework.serializers import Serializer, EmailField
 from django.utils.crypto import get_random_string
 from datetime import timedelta
+
+from . import models
 from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramAuthSerializer, \
     AuthenticatedQuickClientConsultationRequestSerializer, \
     QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
@@ -725,11 +727,8 @@ class PublicServicePriceView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class PublicReviewListView(APIView):
-    """
-    🔹 Клиенты могут просматривать отзывы о психологе с пагинацией.
-    """
-    permission_classes = [AllowAny]  # Доступ для всех клиентов
-    pagination_class = PageNumberPagination  # Используем стандартную пагинацию
+    permission_classes = [AllowAny]
+    pagination_class = PageNumberPagination
 
     @extend_schema(
         tags=["Публичный профиль психолога"],
@@ -738,19 +737,16 @@ class PublicReviewListView(APIView):
     )
     def get(self, request, psychologist_id: int):
         psychologist = get_object_or_404(PsychologistProfile, user_id=psychologist_id)
-        reviews = Review.objects.filter(psychologist=psychologist).order_by("-created_at")
+        reviews = Review.objects.filter(
+            models.Q(consultation_request__taken_by=psychologist) |
+            models.Q(session_request__taken_by=psychologist) |
+            models.Q(session_request__psychologist=psychologist)
+        ).order_by("-created_at")
 
-        # Используем встроенную пагинацию APIView
         paginator = self.pagination_class()
-        paginated_reviews = paginator.paginate_queryset(reviews, request, view=self)
-
-        if paginated_reviews is not None:
-            serializer = ReviewSerializer(paginated_reviews, many=True)
-            return paginator.get_paginated_response(serializer.data)
-
-        # Если пагинация не требуется, вернуть просто список отзывов
-        serializer = ReviewSerializer(reviews, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        page = paginator.paginate_queryset(reviews, request, view=self)
+        serializer = ReviewSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 class PublicFAQView(APIView):
     """

@@ -1,4 +1,3 @@
-import json
 import uuid
 from typing import Optional
 from django.contrib.auth import get_user_model, authenticate
@@ -8,11 +7,9 @@ from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfil
 from hashlib import sha256
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
-import random
 import hmac
 from .tasks import send_email_async
 import time
-from django.utils import timezone
 from datetime import timedelta
 from django.utils.crypto import get_random_string
 from django.utils.timezone import now
@@ -261,13 +258,9 @@ class AnonymousSessionRequestSerializer(serializers.ModelSerializer):
 # Отзыв от клиента психологу
 class ReviewSerializer(serializers.ModelSerializer):
     psychologist_name = serializers.SerializerMethodField()
+    psychologist_id = serializers.SerializerMethodField()
     client_name = serializers.SerializerMethodField()
-
-    def get_psychologist_name(self, obj):
-        return obj.psychologist.user.email
-
-    def get_client_name(self, obj):
-        return obj.client.user.email
+    client_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Review
@@ -281,6 +274,36 @@ class ReviewSerializer(serializers.ModelSerializer):
             'text',
             'created_at',
         ]
+
+    def get_psychologist_name(self, obj):
+        psy = None
+        if obj.consultation_request:
+            psy = obj.consultation_request.taken_by
+        elif obj.session_request:
+            psy = obj.session_request.taken_by or obj.session_request.psychologist
+        return psy.user.get_full_name() if psy else "Психолог"
+
+    def get_psychologist_id(self, obj):
+        psy = None
+        if obj.consultation_request:
+            psy = obj.consultation_request.taken_by
+        elif obj.session_request:
+            psy = obj.session_request.taken_by or obj.session_request.psychologist
+        return psy.user.id if psy else None
+
+    def get_client_name(self, obj):
+        if obj.consultation_request:
+            return obj.consultation_request.client_name
+        elif obj.session_request:
+            return obj.session_request.client_name
+        return "Клиент"
+
+    def get_client_id(self, obj):
+        if obj.consultation_request:
+            return obj.consultation_request.telegram_id
+        elif obj.session_request:
+            return obj.session_request.telegram_id
+        return None
 
 class PsychologistChangePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(required=True)
