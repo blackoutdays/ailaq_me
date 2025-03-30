@@ -693,9 +693,6 @@ class PsychologistOnlyAPIView(APIView):
         if hasattr(user, 'client_profile') and not user.wants_to_be_psychologist:
             raise PermissionDenied("Клиенты не имеют доступа к разделу психолога.")
 
-        if not user.is_psychologist:
-            raise PermissionDenied("Доступ разрешён только для психологов.")
-
         return super().dispatch(request, *args, **kwargs)
 
 
