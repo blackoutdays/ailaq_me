@@ -10,7 +10,6 @@ import asyncio
 nest_asyncio.apply()
 
 import requests
-from django.utils.timezone import now
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 from ailaq.models import QuickClientConsultationRequest, PsychologistSessionRequest
@@ -36,6 +35,111 @@ logging.basicConfig(
 
 User = get_user_model()
 pending_reviews = {}
+
+def build_status_update_keyboard(session_id):
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("\ud83d\udcde Связался", callback_data=f"contact_{session_id}"),
+            InlineKeyboardButton("\u274c Не удалось связаться", callback_data=f"not_contacted_{session_id}")
+        ],
+        [
+            InlineKeyboardButton("\u2705 Сессия прошла", callback_data=f"complete_{session_id}"),
+            InlineKeyboardButton("\u274c Сессия не состоялась", callback_data=f"not_completed_{session_id}")
+        ]
+    ])
+
+async def handle_status_update_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    telegram_id = query.from_user.id
+
+    try:
+        action, session_id = data.rsplit("_", 1)
+        session_id = int(session_id)
+        session = await sync_to_async(PsychologistSessionRequest.objects.get)(id=session_id)
+
+        if session.psychologist.user.telegram_id != telegram_id:
+            await query.edit_message_text("\u26d4\ufe0f Вы не можете изменить статус этой заявки.")
+            return
+
+        status_message = ""
+
+        if action == "contact":
+            session.status = "CONTACTED"
+            status_message = "\ud83d\udcde Вы отметили, что связались с клиентом."
+        elif action == "not_contacted":
+            session.status = "NOT_CONTACTED"
+            status_message = "\u274c Вы отметили, что не удалось связаться с клиентом."
+        elif action == "complete":
+            session.status = "COMPLETED"
+            status_message = "\u2705 Сессия завершена. Спасибо! Клиенту будет предложено оставить отзыв."
+        elif action == "not_completed":
+            session.status = "NOT_COMPLETED"
+            status_message = "\u274c Вы отметили, что сессия не состоялась."
+        else:
+            await query.edit_message_text("\u26a0\ufe0f Неизвестное действие.")
+            return
+
+        await sync_to_async(session.save)()
+        await query.edit_message_text(status_message)
+
+    except Exception as e:
+        logging.error(f"Ошибка обработки статуса: {e}")
+        await query.edit_message_text("\u2757 Ошибка обработки действия. Попробуйте позже.")
+
+async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    if not data.startswith("accept_session_"):
+        return
+
+    session_id = int(data.split("_")[-1])
+    try:
+        session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(id=session_id)
+
+        if session.taken_by:
+            await bot.edit_message_reply_markup(
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id,
+                reply_markup=None
+            )
+            await bot.send_message(
+                chat_id=query.from_user.id,
+                text="\u26d4\ufe0f Эта заявка уже была принята другим психологом."
+            )
+            return
+
+        session.taken_by = session.psychologist
+        session.status = "CONTACTED"
+        await sync_to_async(session.save)()
+
+        new_text = query.message.text + "\n\n\ud83c\udf89 Заявка принята!"
+        await bot.edit_message_text(
+            chat_id=query.message.chat_id,
+            message_id=query.message.message_id,
+            text=new_text,
+            parse_mode="Markdown"
+        )
+
+        await bot.send_message(
+            chat_id=query.from_user.id,
+            text=(
+                f"\ud83d\udce2 Вы приняли заявку!\n"
+                f"\ud83d\udc64 Клиент: {session.client_name}\n"
+                f"\ud83c\udf10 Telegram ID: {session.telegram_id}\n"
+                f"\ud83d\udc81\u200d\u2642\ufe0f Тема: {session.topic}\n"
+                f"\ud83d\udcac {session.comments or 'нет'}"
+            ),
+            reply_markup=build_status_update_keyboard(session.id)
+        )
+
+    except Exception as e:
+        logging.error(f"\u274c Ошибка в callback accept_session: {e}")
+        await query.message.reply_text("\u26a0\ufe0f Ошибка при принятии заявки")
 
 def matches_age(birth_date, preferred_age):
     if not birth_date:
@@ -115,7 +219,6 @@ async def notify_psychologist_telegram(session_request):
 
     except Exception as e:
         logging.error(f"❌ Ошибка уведомления психолога: {e}")
-
 
 # Callback-хендлер для обработки "Принято"
 async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -309,8 +412,6 @@ async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         client_profile = await get_client_profile(consultation.telegram_id)
 
-        # Removed Session creation logic, not used in current implementation
-
         # Помечаем заявку как принятую этим психологом
         consultation.taken_by = psychologist
         await sync_to_async(consultation.save)()
@@ -403,7 +504,6 @@ async def remind_clients_about_reviews():
             except Exception as e:
                 logging.error(f"Ошибка при отправке напоминания клиенту: {e}")
 
-
 async def main() -> None:
     application = ApplicationBuilder().token(settings.TELEGRAM_BOT_TOKEN).build()
 
@@ -418,10 +518,12 @@ async def main() -> None:
     application.add_handler(CommandHandler("status", status_request))
     application.add_handler(MessageHandler(filters.Regex("^/status_\\d+$"), status_request))
 
+    application.add_handler(CallbackQueryHandler(handle_accept_callback))
+    application.add_handler(CallbackQueryHandler(handle_status_update_callback))
+
     # Обработка ввода текста
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_session_request))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_review))
-    application.add_handler(CallbackQueryHandler(handle_accept_callback))
     await application.run_polling()
 
 if __name__ == "__main__":
