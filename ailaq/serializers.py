@@ -13,7 +13,7 @@ import time
 from datetime import timedelta
 from django.utils.crypto import get_random_string
 from django.utils.timezone import now
-from datetime import datetime, date
+from datetime import date
 
 from config import settings
 
@@ -121,6 +121,16 @@ class ChangePasswordSerializer(serializers.Serializer):
         if data["new_password"] != data["confirm_new_password"]:
             raise serializers.ValidationError({"confirm_new_password": "Пароли не совпадают."})
         return data
+
+class PsychologistLevelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PsychologistLevel
+        fields = '__all__'
+
+class BuyRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BuyRequest
+        fields = '__all__'
 
 class ClientProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", read_only=True)
@@ -591,15 +601,5 @@ class TelegramAuthSerializer(serializers.Serializer):
 
         return user
 
-class PsychologistLevelSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PsychologistLevel
-        fields = '__all__'
 
-class BuyRequestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = BuyRequest
-        fields = '__all__'
 
-class EmptySerializer(serializers.Serializer):
-    pass

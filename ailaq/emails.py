@@ -4,9 +4,7 @@ from .tasks import send_email_async
 logger = logging.getLogger(__name__)
 
 def send_email(subject, message, recipient_list):
-    """
-    Запускает отправку email через Celery.
-    """
+    """ Запускает отправку email через Celery """
     if not recipient_list:
         logger.warning("send_email called with empty recipient_list.")
         return

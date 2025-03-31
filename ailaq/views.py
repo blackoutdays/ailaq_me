@@ -2,7 +2,6 @@ import asyncio
 import hmac
 import uuid
 from hashlib import sha256
-
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -12,7 +11,6 @@ from rest_framework.exceptions import NotFound, ValidationError, PermissionDenie
 from rest_framework.serializers import Serializer, EmailField
 from django.utils.crypto import get_random_string
 from datetime import timedelta
-
 from . import models
 from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramAuthSerializer, \
     AuthenticatedQuickClientConsultationRequestSerializer, \
@@ -79,13 +77,13 @@ class RegisterUserView(APIView):
             user = serializer.save()
 
             if user.wants_to_be_psychologist:
-                # 🔹 Если хочет быть психологом → создаём только заявку
+                # Если хочет быть психологом → создаём только заявку
                 PsychologistApplication.objects.get_or_create(user=user, defaults={"status": "PENDING"})
             else:
-                # 🔹 Если обычный клиент → создаём профиль сразу
+                # Если обычный клиент → создаём профиль сразу
                 ClientProfile.objects.create(user=user)
 
-            # 🔹 Если через email → требуется подтверждение
+            # Если через email → требуется подтверждение
             if user.email:
                 verification_code = get_random_string(length=32)
                 user.verification_code = verification_code
@@ -139,10 +137,7 @@ class ResendVerificationSerializer(Serializer):
     email = EmailField(required=True)
 
 class ResendVerificationEmailView(APIView):
-    """
-    Повторная отправка письма подтверждения email.
-    """
-
+    """ Повторная отправка письма подтверждения email """
     @extend_schema(
         tags=["Авторизация"],
         summary="Повторная отправка email-подтверждения",
@@ -198,9 +193,7 @@ class ResendVerificationEmailView(APIView):
         return Response({"message": "Новое письмо отправлено."}, status=status.HTTP_200_OK)
 
 class LoginView(APIView):
-    """
-    Вход в систему (по email и паролю).
-    """
+    """ Вход в систему (по email и паролю) """
 
     @extend_schema(
         tags=["Авторизация"],
@@ -294,11 +287,11 @@ class TelegramAuthView(APIView):
         username = auth_data.get('username', f"user_{telegram_id}")
         first_name = auth_data.get('first_name', '')
 
-        # 🧠 Ищем уже существующего пользователя по Telegram ID
+        # Ищем уже существующего пользователя по Telegram ID
         user = User.objects.filter(telegram_id=telegram_id).first()
 
         if not user:
-            # ⚠️ Если пользователь не найден по Telegram ID — ищем по cookie
+            # Если пользователь не найден по Telegram ID — ищем по cookie
             client_token = request.COOKIES.get('client_token')
 
             if client_token:
@@ -317,10 +310,8 @@ class TelegramAuthView(APIView):
         if not user:
             return Response({"error": "Пользователь не найден. Сначала зарегистрируйтесь через email."}, status=404)
 
-        # ✅ Создаём токен
         refresh = RefreshToken.for_user(user)
 
-        # 🔔 Отправляем сообщение через бота
         send_telegram_message(
             telegram_id=telegram_id,
             text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
@@ -335,13 +326,12 @@ class TelegramAuthView(APIView):
 
 class TelegramAuthPageView(View):
     def get(self, request):
-        return render(request, 'telegram_auth.html')
+        return render(request, 'telegram_auth.html', {})
 
 class VerifyTelegramView(APIView):
     """
     Привязка Telegram после входа.
     """
-
     @extend_schema(
         tags=["Авторизация"],
         summary="Привязка Telegram",

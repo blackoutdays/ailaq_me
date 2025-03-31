@@ -279,7 +279,7 @@ class PsychologistApplication(models.Model):
 
     service_sessions = models.JSONField(default=list, blank=True)
 
-    # **Рейтинги и заявки**
+    # Рейтинги и заявки
     is_verified = models.BooleanField(default=False)
     is_in_catalog = models.BooleanField(default=False)
 
@@ -305,7 +305,7 @@ class PsychologistApplication(models.Model):
         """
         При изменении статуса заявки на `APPROVED` создаём `PsychologistProfile`
         """
-        # 🔹 Получаем старый статус заявки до сохранения
+        # Получаем старый статус заявки до сохранения
         if self.pk:
             old_status = PsychologistApplication.objects.filter(pk=self.pk).values_list("status", flat=True).first()
         else:
@@ -313,7 +313,7 @@ class PsychologistApplication(models.Model):
 
         super().save(*args, **kwargs)
 
-        # 🔹 Если статус изменился с `PENDING` на `APPROVED`, создаём профиль
+        # Если статус изменился с `PENDING` на `APPROVED`, создаём профиль
         if old_status == "PENDING" and self.status == "APPROVED":
             PsychologistProfile.process_psychologist_application(self.id)
 

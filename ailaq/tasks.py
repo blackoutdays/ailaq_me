@@ -9,9 +9,7 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 60})
 def send_email_async(self, subject, message, recipient_list, html_message=None):
-    """
-    Асинхронная отправка email через Celery с поддержкой HTML.
-    """
+    """Асинхронная отправка email через Celery с поддержкой HTML"""
     try:
         send_mail(
             subject=subject,
@@ -19,7 +17,7 @@ def send_email_async(self, subject, message, recipient_list, html_message=None):
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=recipient_list,
             fail_silently=False,
-            html_message=html_message  # Добавили поддержку HTML
+            html_message=html_message
         )
         logger.info(f"📩 Email sent to {', '.join(recipient_list)} (async)")
     except Exception as e:

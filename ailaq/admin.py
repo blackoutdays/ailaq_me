@@ -3,13 +3,12 @@ from django.utils.html import format_html
 from .models import PsychologistApplication, PsychologistProfile, ClientProfile, CustomUser, PsychologistFAQ
 from .services import process_psychologist_application, send_documents_request_email
 import logging
-
 logger = logging.getLogger(__name__)
 
 # FAQ психолога: вопрос/ответ
 class PsychologistFAQInline(admin.TabularInline):
     model = PsychologistFAQ
-    extra = 1  # Пустые строки для добавления новых объектов
+    extra = 1
 
 # Админка для ClientProfile
 @admin.register(ClientProfile)

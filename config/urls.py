@@ -45,7 +45,7 @@ urlpatterns = [
     path("api/resend-verification/", ResendVerificationEmailView.as_view(), name="resend-verification"),
     path("psychologists/change-password/", PsychologistChangePasswordView.as_view(), name="psychologist-change-password"),
 
-                  # Публичные эндпоинты для клиентов
+    # Публичные эндпоинты для клиентов
     path('api/clients/me/', client_me, name='client-me'),
 
     path('api/psychologists/<int:psychologist_id>/qualification/', PublicQualificationView.as_view(), name='public-qualification'),
