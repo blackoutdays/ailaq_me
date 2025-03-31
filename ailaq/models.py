@@ -317,7 +317,6 @@ class PsychologistApplication(models.Model):
         if old_status == "PENDING" and self.status == "APPROVED":
             PsychologistProfile.process_psychologist_application(self.id)
 
-    # **Методы**
     def add_service_session(self, session_type, online_offline, country, city, duration, price, currency):
         """Добавляет новый прием (сессию)."""
         session_data = {
@@ -329,7 +328,7 @@ class PsychologistApplication(models.Model):
             "price": price,
             "currency": currency
         }
-        new_sessions = self.service_sessions[:]  # Создаем копию списка
+        new_sessions = self.service_sessions[:]
         new_sessions.append(session_data)
         self.service_sessions = new_sessions
         self.save(update_fields=['service_sessions'])
@@ -603,7 +602,6 @@ class BuyRequest(models.Model):
 
             # Обновляем видимость психолога в каталоге
             self.psychologist.update_catalog_visibility()
-
 
 class QuickClientConsultationRequest(models.Model):
     client_name = models.CharField(max_length=255, verbose_name="Как к вам обращаться?")
