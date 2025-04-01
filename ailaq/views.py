@@ -1,6 +1,8 @@
 import hmac
 import uuid
 from hashlib import sha256
+from threading import Thread
+
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -160,7 +162,6 @@ class QuickClientConsultationAPIView(APIView):
 
         profile = user.client_profile
 
-        # Берем данные из профиля напрямую
         profile_data = {
             'client_name': profile.full_name,
             'age': profile.age,
@@ -170,19 +171,64 @@ class QuickClientConsultationAPIView(APIView):
         serializer = AuthenticatedQuickClientConsultationRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Сохраняем уже с профилем
         consultation = QuickClientConsultationRequest.objects.create(
             **serializer.validated_data,
             **profile_data,
             telegram_id=user.telegram_id
         )
 
-        async_to_sync(notify_all_psychologists)(consultation)
+        # 💥 Вот тут заменяем async_to_sync(...) на поток:
+        Thread(target=notify_all_psychologists, args=(consultation,)).start()
+
         response_serializer = QuickClientConsultationRequestSerializer(consultation)
         return Response({
             "message": "Заявка успешно создана.",
             "consultation_request": response_serializer.data
         }, status=201)
+
+# class QuickClientConsultationAPIView(APIView):
+#     permission_classes = [IsAuthenticated]
+#
+#     @extend_schema(
+#         tags=["Клиент - консультация"],
+#         summary="Быстрая консультация для зарегистрированных клиентов",
+#         request=AuthenticatedQuickClientConsultationRequestSerializer,
+#         responses={201: QuickClientConsultationRequestSerializer},
+#     )
+#     def post(self, request):
+#         user = request.user
+#
+#         if not user.telegram_id:
+#             return Response({"error": "Привяжите Telegram через Web View перед записью."}, status=400)
+#
+#         if not hasattr(user, 'client_profile'):
+#             return Response({"error": "Профиль клиента не найден."}, status=400)
+#
+#         profile = user.client_profile
+#
+#         # Берем данные из профиля напрямую
+#         profile_data = {
+#             'client_name': profile.full_name,
+#             'age': profile.age,
+#             'gender': profile.gender,
+#         }
+#
+#         serializer = AuthenticatedQuickClientConsultationRequestSerializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#
+#         # Сохраняем уже с профилем
+#         consultation = QuickClientConsultationRequest.objects.create(
+#             **serializer.validated_data,
+#             **profile_data,
+#             telegram_id=user.telegram_id
+#         )
+#
+#         async_to_sync(notify_all_psychologists)(consultation)
+#         response_serializer = QuickClientConsultationRequestSerializer(consultation)
+#         return Response({
+#             "message": "Заявка успешно создана.",
+#             "consultation_request": response_serializer.data
+#         }, status=201)
 
 class QuickClientConsultationAnonymousAPIView(APIView):
     permission_classes = [AllowAny]

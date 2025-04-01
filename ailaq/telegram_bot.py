@@ -362,18 +362,11 @@ async def process_review(update, context):
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
-async def notify_all_psychologists(consultation):
-    from ailaq.models import PsychologistProfile
-    from ailaq.telegram_bot import send_telegram_message
-
-    # ⛑ Оборачиваем ORM-запрос
-    psychologists = await sync_to_async(lambda: list(
-        PsychologistProfile.objects.filter(
-            user__telegram_id__isnull=False,
-            application__status='APPROVED'
-        )
-    ))()
-
+def notify_all_psychologists(consultation):
+    psychologists = PsychologistProfile.objects.filter(
+        user__telegram_id__isnull=False,
+        application__status='APPROVED'
+    )
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
         f"Язык: {consultation.psychologist_language}\n"
@@ -387,9 +380,9 @@ async def notify_all_psychologists(consultation):
 
     for p in psychologists:
         try:
-            await send_telegram_message(p.user.telegram_id, message)
+            send_telegram_message_sync(p.user.telegram_id, message)
         except Exception as e:
-            logging.error(f"Ошибка отправки сообщения психологу {p.user_id}: {e}")
+            logging.error(f"Ошибка отправки психологу {p.user_id}: {e}")
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
