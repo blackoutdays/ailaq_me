@@ -237,8 +237,9 @@ class TelegramAuthView(APIView):
     def get(self, request):
         print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
 
-        auth_data = request.query_params.dict()
-        received_hash = auth_data.pop('hash', None)
+        received_hash = request.query_params.get('hash')
+        telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
+        auth_data = {k: request.query_params[k] for k in telegram_fields if k in request.query_params}
 
         if not received_hash:
             return Response({"error": "Нет hash"}, status=400)
@@ -270,7 +271,6 @@ class TelegramAuthView(APIView):
                         consultation.save()
 
         if not user:
-            # wants_to_be_psychologist из query-параметров
             wants_to_be_psychologist = request.query_params.get("wants_to_be_psychologist", "false").lower() == "true"
 
             user = CustomUser.objects.create(
@@ -281,10 +281,10 @@ class TelegramAuthView(APIView):
 
             if wants_to_be_psychologist:
                 PsychologistApplication.objects.create(user=user, status="PENDING")
-                user.role = "PSYCHOLOGIST"
+                user.is_psychologist = True
             else:
                 ClientProfile.objects.create(user=user)
-                user.role = "CLIENT"
+                user.is_psychologist = False
 
             user.save()
 
