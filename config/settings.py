@@ -15,6 +15,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = env('SECRET_KEY', default='change-me')
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://ailaq.me",
+    "https://www.ailaq.me",
+]
+
 DEBUG = env.bool("DEBUG", default=True)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=['*'])
