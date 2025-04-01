@@ -376,7 +376,9 @@ async def process_review(update, context):
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
+
 def notify_all_psychologists(consultation):
+    from .views import bot  # если не импортирован выше
     psychologists = PsychologistProfile.objects.filter(
         user__telegram_id__isnull=False,
         application__status='APPROVED'
@@ -394,7 +396,7 @@ def notify_all_psychologists(consultation):
 
     for p in psychologists:
         try:
-            send_telegram_message_sync(p.user.telegram_id, message)
+            bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
             logging.error(f"Ошибка отправки психологу {p.user_id}: {e}")
 
