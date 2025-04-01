@@ -362,24 +362,17 @@ async def process_review(update, context):
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
-def send_telegram_message_sync(telegram_id, text):
-    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": telegram_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-    except Exception as e:
-        logging.error(f"Ошибка отправки сообщения Telegram ID {telegram_id}: {e}")
+async def notify_all_psychologists(consultation):
+    from ailaq.models import PsychologistProfile
+    from ailaq.telegram_bot import send_telegram_message
 
-def notify_all_psychologists(consultation):
-    psychologists = PsychologistProfile.objects.filter(
-        user__telegram_id__isnull=False,
-        application__status='APPROVED'
-    )
+    # ⛑ Оборачиваем ORM-запрос
+    psychologists = await sync_to_async(lambda: list(
+        PsychologistProfile.objects.filter(
+            user__telegram_id__isnull=False,
+            application__status='APPROVED'
+        )
+    ))()
 
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
@@ -393,8 +386,10 @@ def notify_all_psychologists(consultation):
     )
 
     for p in psychologists:
-        if p.user.telegram_id:
-            send_telegram_message_sync(p.user.telegram_id, message)
+        try:
+            await send_telegram_message(p.user.telegram_id, message)
+        except Exception as e:
+            logging.error(f"Ошибка отправки сообщения психологу {p.user_id}: {e}")
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
