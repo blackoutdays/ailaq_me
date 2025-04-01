@@ -507,10 +507,8 @@ async def remind_clients_about_reviews():
 async def main() -> None:
     application = ApplicationBuilder().token(settings.TELEGRAM_BOT_TOKEN).build()
 
-    # Команда для привязки Telegram ID (используется автоматически при авторизации)
     application.add_handler(CommandHandler("start", link_telegram_user))
 
-    # Команды для клиентов
     application.add_handler(MessageHandler(filters.Regex("Оставить отзыв"), leave_review))
     application.add_handler(MessageHandler(filters.Regex("^/accept_\\d+$"), accept_request))
 

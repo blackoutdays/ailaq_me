@@ -16,8 +16,7 @@ from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramA
     AuthenticatedQuickClientConsultationRequestSerializer, \
     QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
     PsychologistChangePasswordSerializer
-from datetime import datetime
-from django.utils.timezone import now, make_aware
+from django.utils.timezone import now
 from django.shortcuts import get_object_or_404, render
 from rest_framework import status, viewsets
 from ailaq.tasks import send_email_async
@@ -229,6 +228,10 @@ class LoginView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class TelegramAuthPageView(View):
+    def get(self, request):
+        return render(request, 'telegram_auth.html', {})
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def get(self, request):
@@ -251,35 +254,34 @@ class TelegramAuthView(APIView):
         username = auth_data.get('username', f"user_{telegram_id}")
         first_name = auth_data.get('first_name', '')
 
-        # Ищем уже существующего пользователя по Telegram ID
         user = User.objects.filter(telegram_id=telegram_id).first()
 
         if not user:
-            # Если пользователь не найден по Telegram ID — ищем по cookie
             client_token = request.COOKIES.get('client_token')
-
             if client_token:
                 consultation = QuickClientConsultationRequest.objects.filter(client_token=client_token).first()
                 if consultation:
                     email_from_request = consultation.email or f"{telegram_id}@telegram.local"
                     user = User.objects.filter(email=email_from_request).first()
-
                     if user:
                         user.telegram_id = telegram_id
                         user.save()
                         consultation.telegram_id = telegram_id
                         consultation.save()
 
-        # 🔧 Если пользователя всё равно нет — можно отказать или создать
         if not user:
             return Response({"error": "Пользователь не найден. Сначала зарегистрируйтесь через email."}, status=404)
 
         refresh = RefreshToken.for_user(user)
 
-        send_telegram_message(
-            telegram_id=telegram_id,
-            text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
-        )
+        from asgiref.sync import async_to_sync
+        try:
+            async_to_sync(send_telegram_message)(
+                telegram_id=telegram_id,
+                text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки сообщения в Telegram: {e}")
 
         return Response({
             'access_token': str(refresh.access_token),
@@ -288,14 +290,8 @@ class TelegramAuthView(APIView):
             'message': "Telegram успешно привязан",
         })
 
-class TelegramAuthPageView(View):
-    def get(self, request):
-        return render(request, 'telegram_auth.html', {})
-
 class VerifyTelegramView(APIView):
-    """
-    Привязка Telegram после входа.
-    """
+    """ Привязка Telegram после входа в профиле """
     @extend_schema(
         tags=["Авторизация"],
         summary="Привязка Telegram",
@@ -317,7 +313,6 @@ class VerifyTelegramView(APIView):
         user.telegram_id = telegram_id
         user.save()
         return Response({"message": "Telegram привязан успешно."}, status=status.HTTP_200_OK)
-
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
