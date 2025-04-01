@@ -362,30 +362,39 @@ async def process_review(update, context):
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
-async def notify_all_psychologists(consultation):
-    from ailaq.telegram_bot import send_telegram_message
+def send_telegram_message_sync(telegram_id, text):
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": telegram_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+    except Exception as e:
+        logging.error(f"Ошибка отправки сообщения Telegram ID {telegram_id}: {e}")
 
-    # ORM-запрос обернут в sync_to_async
-    psychologists = await sync_to_async(lambda: list(
-        PsychologistProfile.objects.filter(
-            user__telegram_id__isnull=False,
-            application__status='APPROVED'
-        )
-    ))()
+def notify_all_psychologists(consultation):
+    psychologists = PsychologistProfile.objects.filter(
+        user__telegram_id__isnull=False,
+        application__status='APPROVED'
+    )
 
     message = (
-        f"🆕Новая заявка на быструю консультацию\n"
+        f"🆕 Новая заявка на быструю консультацию\n"
         f"Язык: {consultation.psychologist_language}\n"
         f"Пол клиента: {consultation.gender}, возраст: {consultation.age}\n"
         f"Предпочтения: психолог {consultation.psychologist_gender}, "
-        f"Возраст: {consultation.preferred_psychologist_age}\n"
+        f"возраст: {consultation.preferred_psychologist_age}\n"
         f"Тема: {consultation.topic}\n"
         f"Комментарий: {consultation.comments}\n\n"
         f"Если вы подходите по критериям — ответьте /accept_{consultation.id}"
     )
 
     for p in psychologists:
-        await send_telegram_message(p.user.telegram_id, message)
+        if p.user.telegram_id:
+            send_telegram_message_sync(p.user.telegram_id, message)
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
