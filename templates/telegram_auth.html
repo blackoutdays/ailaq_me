@@ -13,7 +13,7 @@
 
     <script>
   function onTelegramAuth(user) {
-    fetch("https://www.api.ailaq.me/api/auth/telegram/", {
+    fetch("https://api.ailaq.me/api/auth/telegram/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -28,7 +28,7 @@
       if (data.access_token) {
         // Сохраняем токены или отправляем в main window
         localStorage.setItem("access_token", data.access_token);
-        window.location.href = "https://www.api.ailaq.me/?token=" + data.access_token;
+        window.location.href = "https://api.ailaq.me/?token=" + data.access_token;
       } else {
         console.error("Ошибка Telegram авторизации", data);
       }
@@ -51,7 +51,7 @@
             script.setAttribute('data-request-access', 'write');
             script.setAttribute('data-lang', 'ru');
 
-            const authUrl = "https://www.api.ailaq.me/api/auth/telegram/?wants_to_be_psychologist=" + isPsychologist;
+            const authUrl = "https://api.ailaq.me/api/auth/telegram/?wants_to_be_psychologist=" + isPsychologist;
             script.setAttribute('data-auth-url', authUrl);
 
             placeholder.appendChild(script);
@@ -61,7 +61,7 @@
 <script type="text/javascript">
   function onTelegramAuth(user) {
     alert('Logged in as ' + user.first_name + ' ' + user.last_name + ' (' + user.id + (user.username ? ', @' + user.username : '') + ')');
-    fetch("https://www.api.ailaq.me/api/auth/telegram/", {
+    fetch("https://api.ailaq.me/api/auth/telegram/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
