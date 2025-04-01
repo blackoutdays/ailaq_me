@@ -232,14 +232,24 @@ class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
 
+
+# @method_decorator(csrf_exempt, name='dispatch')
+# class TelegramAuthView(APIView):
+#     def get(self, request):
+#         print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
+#
+#         received_hash = request.query_params.get('hash')
+#         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
+#         auth_data = {k: request.query_params[k] for k in telegram_fields if k in request.query_params}
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
-    def get(self, request):
-        print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
+    def post(self, request):
+        print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.data}")
 
-        received_hash = request.query_params.get('hash')
+        received_hash = request.data.get('hash')
         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
-        auth_data = {k: request.query_params[k] for k in telegram_fields if k in request.query_params}
+        auth_data = {k: request.data[k] for k in telegram_fields if k in request.data}
 
         if not received_hash:
             return Response({"error": "Нет hash"}, status=400)
@@ -271,7 +281,7 @@ class TelegramAuthView(APIView):
                         consultation.save()
 
         if not user:
-            wants_to_be_psychologist = request.query_params.get("wants_to_be_psychologist", "false").lower() == "true"
+            wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
             user = CustomUser.objects.create(
                 username=f"tg_{telegram_id}",
