@@ -377,7 +377,7 @@ async def process_review(update, context):
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
 def notify_all_psychologists(consultation):
-    from .views import bot  # убедитесь, что это работает
+    global bot
     psychologists = PsychologistProfile.objects.filter(
         user__telegram_id__isnull=False,
         application__status='APPROVED'
@@ -404,7 +404,7 @@ def notify_all_psychologists(consultation):
         try:
             bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
-            print.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+            print(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
