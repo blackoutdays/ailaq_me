@@ -12,47 +12,24 @@
     <div id="telegram-login-placeholder" style="margin-top: 20px;"></div>
 
     <script>
-  function onTelegramAuth(user) {
-    fetch("https://www.ailaq.me/api/auth/telegram/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        ...user,
-        wants_to_be_psychologist: isPsychologist
-      })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.access_token) {
-        // Сохраняем токены или отправляем в main window
-        localStorage.setItem("access_token", data.access_token);
-        window.location.href = "https://www.ailaq.me/?token=" + data.access_token;
-      } else {
-        console.error("Ошибка Telegram авторизации", data);
-      }
-    });
-  }
+        function initTelegramLogin(isPsychologist) {
+            const placeholder = document.getElementById('telegram-login-placeholder');
+            placeholder.innerHTML = '';
 
-  let isPsychologist = false;
+            const script = document.createElement('script');
+            script.setAttribute('async', '');
+            script.src = "https://telegram.org/js/telegram-widget.js?22";
+            script.setAttribute('data-telegram-login', 'aqlaq_test_bot');
+            script.setAttribute('data-size', 'large');
+            script.setAttribute('data-userpic', 'true');
+            script.setAttribute('data-request-access', 'write');
+            script.setAttribute('data-lang', 'ru');
 
-  function initTelegramLogin(psych) {
-    isPsychologist = psych;
-    const placeholder = document.getElementById('telegram-login-placeholder');
-    placeholder.innerHTML = '';
+            const authUrl = "https://www.ailaq.me/api/auth/telegram/?wants_to_be_psychologist=" + isPsychologist;
+            script.setAttribute('data-auth-url', authUrl);
 
-    const script = document.createElement('script');
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute('data-telegram-login', 'aqlaq_test_bot');
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-userpic', 'true');
-    script.setAttribute('data-request-access', 'write');
-    script.setAttribute('data-userpic', 'true');
-    script.setAttribute('data-lang', 'ru');
-    script.setAttribute('data-onauth', 'onTelegramAuth');
-    placeholder.appendChild(script);
-  }
-</script>
+            placeholder.appendChild(script);
+        }
+    </script>
 </body>
 </html>

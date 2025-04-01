@@ -233,23 +233,14 @@ class TelegramAuthPageView(View):
         return render(request, 'telegram_auth.html', {})
 
 
-# @method_decorator(csrf_exempt, name='dispatch')
-# class TelegramAuthView(APIView):
-#     def get(self, request):
-#         print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
-#
-#         received_hash = request.query_params.get('hash')
-#         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
-#         auth_data = {k: request.query_params[k] for k in telegram_fields if k in request.query_params}
-
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
-    def post(self, request):
-        print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.data}")
+    def get(self, request):
+        print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
 
-        received_hash = request.data.get('hash')
+        received_hash = request.query_params.get('hash')
         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
-        auth_data = {k: request.data[k] for k in telegram_fields if k in request.data}
+        auth_data = {k: request.query_params[k] for k in telegram_fields if k in request.query_params}
 
         if not received_hash:
             return Response({"error": "Нет hash"}, status=400)
@@ -281,7 +272,7 @@ class TelegramAuthView(APIView):
                         consultation.save()
 
         if not user:
-            wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
+            wants_to_be_psychologist = request.query_params.get("wants_to_be_psychologist", "false").lower() == "true"
 
             user = CustomUser.objects.create(
                 username=f"tg_{telegram_id}",
@@ -317,29 +308,29 @@ class TelegramAuthView(APIView):
             'message': "Telegram успешно привязан",
         })
 
-class VerifyTelegramView(APIView):
-    """ Привязка Telegram после входа в профиле """
-    @extend_schema(
-        tags=["Авторизация"],
-        summary="Привязка Telegram",
-        description="Позволяет привязать Telegram к аккаунту после входа через email.",
-        request=None,
-        responses={
-            200: OpenApiResponse(description="Telegram привязан."),
-            400: OpenApiResponse(description="Ошибка."),
-        },
-    )
-    def post(self, request):
-        auth_data = request.data
-        telegram_id = auth_data["id"]
-        user = request.user
-
-        if user.telegram_id:
-            return Response({"message": "Telegram уже привязан."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.telegram_id = telegram_id
-        user.save()
-        return Response({"message": "Telegram привязан успешно."}, status=status.HTTP_200_OK)
+# class VerifyTelegramView(APIView):
+#     """ Привязка Telegram после входа в профиле """
+#     @extend_schema(
+#         tags=["Авторизация"],
+#         summary="Привязка Telegram",
+#         description="Позволяет привязать Telegram к аккаунту после входа через email.",
+#         request=None,
+#         responses={
+#             200: OpenApiResponse(description="Telegram привязан."),
+#             400: OpenApiResponse(description="Ошибка."),
+#         },
+#     )
+#     def post(self, request):
+#         auth_data = request.data
+#         telegram_id = auth_data["id"]
+#         user = request.user
+#
+#         if user.telegram_id:
+#             return Response({"message": "Telegram уже привязан."}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         user.telegram_id = telegram_id
+#         user.save()
+#         return Response({"message": "Telegram привязан успешно."}, status=status.HTTP_200_OK)
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
