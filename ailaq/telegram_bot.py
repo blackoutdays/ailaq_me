@@ -155,7 +155,6 @@ def send_telegram_message_sync(telegram_id, text):
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения Telegram ID {telegram_id}: {e}")
 
-
 def matches_age(birth_date, preferred_age):
     if not birth_date:
         return False

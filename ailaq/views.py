@@ -248,7 +248,7 @@ class QuickClientConsultationAnonymousAPIView(APIView):
         consultation.client_token = token
         consultation.save()
 
-        async_to_sync(notify_all_psychologists)(consultation)
+        Thread(target=notify_all_psychologists, args=(consultation,)).start()
         response_data = serializer.data
         response_data['client_token'] = token
 
