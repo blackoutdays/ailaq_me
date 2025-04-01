@@ -384,6 +384,10 @@ def notify_all_psychologists(consultation):
     ).select_related('user', 'application')
 
     print(f"[TELEGRAM] Рассылка заявки {consultation.id} — психологов найдено: {psychologists.count()}")
+    print(f"Всего профилей: {PsychologistProfile.objects.count()}")
+    print(f"С Telegram ID: {PsychologistProfile.objects.filter(user__telegram_id__isnull=False).count()}")
+    print(f"С approved заявкой: {PsychologistProfile.objects.filter(application__status='APPROVED').count()}")
+    print(f"И того, кто получит уведомление: {psychologists.count()}")
 
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
@@ -401,7 +405,6 @@ def notify_all_psychologists(consultation):
             bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
             print.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
-
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
