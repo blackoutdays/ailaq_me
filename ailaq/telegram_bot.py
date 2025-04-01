@@ -362,20 +362,23 @@ async def process_review(update, context):
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
-
 async def notify_all_psychologists(consultation):
     from ailaq.telegram_bot import send_telegram_message
-    psychologists = PsychologistProfile.objects.filter(
-        user__telegram_id__isnull=False,
-        application__status='APPROVED'
-    )
+
+    # ORM-запрос обернут в sync_to_async
+    psychologists = await sync_to_async(lambda: list(
+        PsychologistProfile.objects.filter(
+            user__telegram_id__isnull=False,
+            application__status='APPROVED'
+        )
+    ))()
 
     message = (
-        f"🆕 Новая заявка на быструю консультацию\n"
+        f"🆕Новая заявка на быструю консультацию\n"
         f"Язык: {consultation.psychologist_language}\n"
         f"Пол клиента: {consultation.gender}, возраст: {consultation.age}\n"
         f"Предпочтения: психолог {consultation.psychologist_gender}, "
-        f"возраст: {consultation.preferred_psychologist_age}\n"
+        f"Возраст: {consultation.preferred_psychologist_age}\n"
         f"Тема: {consultation.topic}\n"
         f"Комментарий: {consultation.comments}\n\n"
         f"Если вы подходите по критериям — ответьте /accept_{consultation.id}"
@@ -519,7 +522,6 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_accept_callback))
     application.add_handler(CallbackQueryHandler(handle_status_update_callback))
 
-    # Обработка ввода текста
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_review))
     await application.run_polling()
 

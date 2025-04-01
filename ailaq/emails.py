@@ -15,7 +15,7 @@ def send_email(subject, message, recipient_list):
         logger.error(f" Failed to schedule send_email_async: {str(e)}")
 
 def send_approval_email(application):
-    """ Отправляет email об одобрении заявки психолога. """
+    """ Отправляет email об одобрении заявки психолога """
     subject = "Your Psychologist Application Status"
     message = (
         f"Dear {application.user.email},\n\n"
@@ -25,7 +25,7 @@ def send_approval_email(application):
     send_email(subject, message, [application.user.email])
 
 def send_rejection_email(application):
-    """ Отправляет email об отклонении заявки психолога. """
+    """ Отправляет email об отклонении заявки психолога """
     subject = "Your Psychologist Application Status"
     message = (
         f"Dear {application.user.email},\n\n"
