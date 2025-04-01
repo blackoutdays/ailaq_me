@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 .env
-/media
-/staticfiles
+.git
+.gitignore
+media/
+static/
+staticfiles/

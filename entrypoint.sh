@@ -1,5 +1,4 @@
-#!/bin/bash
-
+#!/bin/sh
 set -e
 
 echo "Waiting for PostgreSQL..."
@@ -13,7 +12,7 @@ while ! nc -z rabbitmq 5672; do
 done
 
 if [ "$1" = "gunicorn" ]; then
-  echo "Applying migrations..."
+  echo "Applying database migrations..."
   python manage.py migrate --noinput
   echo "Collecting static files..."
   python manage.py collectstatic --noinput
