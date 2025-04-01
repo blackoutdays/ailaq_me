@@ -488,7 +488,7 @@ async def status_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_text = f"📄 Статус заявки #{request.id}: {request.status}\nКлиент: {request.client_name}\nТема: {request.topic}"
         await update.message.reply_text(status_text)
     except Exception:
-        await update.message.reply_text("❗ Ошибка получения статуса заявки.")
+        await update.message.reply_text("❗Ошибка получения статуса заявки.")
 
 async def remind_clients_about_reviews():
     completed = PsychologistSessionRequest.objects.filter(status="COMPLETED", review_submitted=False)
