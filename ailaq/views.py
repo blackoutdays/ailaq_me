@@ -1,4 +1,3 @@
-import asyncio
 import hmac
 import uuid
 from hashlib import sha256
@@ -53,185 +52,9 @@ logger = logging.getLogger("telegram_auth")
 User = get_user_model()
 bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
-class RegisterUserView(APIView):
-    """
-    Регистрация пользователей:
-    - Клиенты: email или Telegram.
-    - Психологи: только email + создаётся заявка.
-    """
-
-    @extend_schema(
-        tags=["Регистрация"],
-        summary="Регистрация (клиент или психолог)",
-        description="Регистрация через email (психолог) или email/Telegram (клиент).",
-        request=RegisterSerializer,
-        responses={
-            201: OpenApiResponse(description="Пользователь зарегистрирован."),
-            400: OpenApiResponse(description="Ошибка валидации."),
-        },
-    )
-    def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-
-            if user.wants_to_be_psychologist:
-                # Пользователь хочет быть психологом → сразу помечаем его так
-                user.is_psychologist = True
-                user.save(update_fields=["is_psychologist"])
-
-                # Создаём заявку на модерацию
-                PsychologistApplication.objects.get_or_create(user=user, defaults={"status": "PENDING"})
-
-                # Создаём пустой профиль психолога (если у тебя есть отдельная модель)
-                PsychologistProfile.objects.get_or_create(user=user)
-
-            else:
-                # Клиент → создаём профиль клиента
-                ClientProfile.objects.create(user=user)
-
-            # Если через email → требуется подтверждение
-            if user.email:
-                verification_code = get_random_string(length=32)
-                user.verification_code = verification_code
-                user.verification_code_expiration = now() + timedelta(hours=24)
-                user.save()
-
-                confirmation_link = f"{settings.FRONTEND_URL}/api/confirm-email/{verification_code}"
-                subject = "Подтверждение вашего email"
-                message = f"Пройдите по ссылке для подтверждения: {confirmation_link}"
-
-                send_email_async.delay(subject, message, [user.email])
-
-                return Response(
-                    {"message": "На ваш email отправлена ссылка для подтверждения."},
-                    status=status.HTTP_201_CREATED
-                )
-
-            return Response(
-                {"message": "Регистрация успешно завершена."},
-                status=status.HTTP_201_CREATED
-            )
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class ConfirmEmailView(APIView):
-    def get(self, request, verification_code):
-        user = CustomUser.objects.filter(verification_code=verification_code).first()
-
-        if not user or user.verification_code_expiration < now():
-            if user:
-                user.verification_code = None
-                user.verification_code_expiration = None
-                user.save()
-            return Response(
-                {"error": "Ссылка недействительна или истек срок ее действия."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        user.is_active = True
-        user.verification_code = None
-        user.verification_code_expiration = None
-        user.save()
-
-        return Response(
-            {"message": "Email успешно подтвержден. Теперь вы можете войти."},
-            status=status.HTTP_200_OK
-        )
-
-class ResendVerificationSerializer(Serializer):
-    """ Сериализатор для повторной отправки email-подтверждения """
-    email = EmailField(required=True)
-
-class ResendVerificationEmailView(APIView):
-    """ Повторная отправка письма подтверждения email """
-    @extend_schema(
-        tags=["Авторизация"],
-        summary="Повторная отправка email-подтверждения",
-        description="Отправляет новую ссылку для подтверждения email.",
-        request=ResendVerificationSerializer,  # Добавлен корректный request body
-        responses={
-            200: {"message": "Новое письмо отправлено."},
-            400: {"error": "Email уже подтвержден или отправка слишком частая."},
-            404: {"error": "Пользователь не найден."},
-        },
-    )
-    def post(self, request):
-        serializer = ResendVerificationSerializer(data=request.data)
-
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        email = serializer.validated_data["email"]
-
-        user = CustomUser.objects.filter(email=email).first()
-
-        if not user:
-            return Response({"error": "Пользователь не найден."}, status=status.HTTP_404_NOT_FOUND)
-
-        if user.is_active:
-            return Response({"error": "Email уже подтвержден."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Проверяем, не было ли отправки письма недавно (лимит: 5 минут)
-        if user.verification_code_expiration and (now() - user.verification_code_expiration).seconds < 300:
-            return Response({"error": "Пожалуйста, подождите 5 минут перед повторной отправкой."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Генерируем новый код
-        verification_code = get_random_string(length=32)
-        user.verification_code = verification_code
-        user.verification_code_expiration = now() + timedelta(hours=24)
-        user.save()
-
-        # Отправляем новое письмо
-        confirmation_link = f"{settings.FRONTEND_URL}/api/confirm-email/{verification_code}"
-        subject = "Подтверждение вашего email"
-        message = f"""
-        Здравствуйте! 
-        Вы запросили повторное письмо для подтверждения email. 
-        Пройдите по ссылке, чтобы подтвердить ваш аккаунт: 
-
-        {confirmation_link}
-
-        Если вы не запрашивали подтверждение, проигнорируйте это письмо.
-        """
-
-        send_email_async.delay(subject, message, [user.email])
-
-        return Response({"message": "Новое письмо отправлено."}, status=status.HTTP_200_OK)
-
-class LoginView(APIView):
-    """ Вход в систему (по email и паролю) """
-
-    @extend_schema(
-        tags=["Авторизация"],
-        summary="Вход в систему",
-        description="Позволяет пользователю войти в систему по email и паролю.",
-        request=LoginSerializer,
-        responses={
-            200: OpenApiResponse(description="Успешный вход."),
-            400: OpenApiResponse(description="Неверные учетные данные."),
-        },
-    )
-    def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data["user"]
-            refresh = RefreshToken.for_user(user)
-
-            return Response({
-                "message": "Вход выполнен успешно.",
-                "access_token": str(refresh.access_token),
-                "refresh_token": str(refresh),
-                "telegram_linked": bool(user.telegram_id),
-                "role": user.role
-            }, status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
-
 
 # @method_decorator(csrf_exempt, name='dispatch')
 # class TelegramAuthView(APIView):
@@ -316,75 +139,6 @@ class TelegramAuthView(APIView):
             'role': user.role,
             'message': "Telegram успешно привязан",
         })
-
-class VerifyTelegramView(APIView):
-    """ Привязка Telegram после входа в профиле """
-    @extend_schema(
-        tags=["Авторизация"],
-        summary="Привязка Telegram",
-        description="Позволяет привязать Telegram к аккаунту после входа через email.",
-        request=None,
-        responses={
-            200: OpenApiResponse(description="Telegram привязан."),
-            400: OpenApiResponse(description="Ошибка."),
-        },
-    )
-    def post(self, request):
-        auth_data = request.data
-        telegram_id = auth_data["id"]
-        user = request.user
-
-        if user.telegram_id:
-            return Response({"message": "Telegram уже привязан."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.telegram_id = telegram_id
-        user.save()
-        return Response({"message": "Telegram привязан успешно."}, status=status.HTTP_200_OK)
-
-class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        summary="Смена пароля",
-        description="Позволяет сменить пароль, указав текущий пароль.",
-        request=ChangePasswordSerializer,
-        responses={200: {"message": "Пароль успешно изменен"}},
-    )
-    def post(self, request):
-        serializer = self.ChangePasswordSerializer(data=request.data)
-        if serializer.is_valid():
-            user = request.user
-
-            # Проверяем текущий пароль
-            if not user.check_password(serializer.validated_data["current_password"]):
-                return Response({"error": "Неверный текущий пароль."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Устанавливаем новый пароль
-            user.set_password(serializer.validated_data["new_password"])
-            user.save()
-
-            return Response({"message": "Пароль успешно изменен."}, status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class PsychologistChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        tags=["Психолог"],
-        summary="Смена пароля для психолога",
-        request=PsychologistChangePasswordSerializer,
-        responses={
-            200: OpenApiResponse(description="Пароль успешно обновлён"),
-            400: OpenApiResponse(description="Ошибки валидации, например: пароли не совпадают или текущий неверный"),
-        }
-    )
-    def post(self, request):
-        serializer = PsychologistChangePasswordSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
-
 
 class QuickClientConsultationAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1315,4 +1069,248 @@ class TopicListView(APIView):
         topics = Topic.objects.all()
         serializer = TopicSerializer(topics, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+### delete later
+
+class RegisterUserView(APIView):
+    """
+    Регистрация пользователей:
+    - Клиенты: email или Telegram.
+    - Психологи: только email + создаётся заявка.
+    """
+    @extend_schema(
+        tags=["Регистрация"],
+        summary="Регистрация (клиент или психолог)",
+        description="Регистрация через email (психолог) или email/Telegram (клиент).",
+        request=RegisterSerializer,
+        responses={
+            201: OpenApiResponse(description="Пользователь зарегистрирован."),
+            400: OpenApiResponse(description="Ошибка валидации."),
+        },
+    )
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+
+            if user.wants_to_be_psychologist:
+                # Пользователь хочет быть психологом → сразу помечаем его так
+                user.is_psychologist = True
+                user.save(update_fields=["is_psychologist"])
+
+                # Создаём заявку на модерацию
+                PsychologistApplication.objects.get_or_create(user=user, defaults={"status": "PENDING"})
+
+                # Создаём пустой профиль психолога (если у тебя есть отдельная модель)
+                PsychologistProfile.objects.get_or_create(user=user)
+
+            else:
+                # Клиент → создаём профиль клиента
+                ClientProfile.objects.create(user=user)
+
+            # Если через email → требуется подтверждение
+            if user.email:
+                verification_code = get_random_string(length=32)
+                user.verification_code = verification_code
+                user.verification_code_expiration = now() + timedelta(hours=24)
+                user.save()
+
+                confirmation_link = f"{settings.FRONTEND_URL}/api/confirm-email/{verification_code}"
+                subject = "Подтверждение вашего email"
+                message = f"Пройдите по ссылке для подтверждения: {confirmation_link}"
+
+                send_email_async.delay(subject, message, [user.email])
+
+                return Response(
+                    {"message": "На ваш email отправлена ссылка для подтверждения."},
+                    status=status.HTTP_201_CREATED
+                )
+
+            return Response(
+                {"message": "Регистрация успешно завершена."},
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ConfirmEmailView(APIView):
+    def get(self, request, verification_code):
+        user = CustomUser.objects.filter(verification_code=verification_code).first()
+
+        if not user or user.verification_code_expiration < now():
+            if user:
+                user.verification_code = None
+                user.verification_code_expiration = None
+                user.save()
+            return Response(
+                {"error": "Ссылка недействительна или истек срок ее действия."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.is_active = True
+        user.verification_code = None
+        user.verification_code_expiration = None
+        user.save()
+
+        return Response(
+            {"message": "Email успешно подтвержден. Теперь вы можете войти."},
+            status=status.HTTP_200_OK
+        )
+
+class ResendVerificationSerializer(Serializer):
+    """ Сериализатор для повторной отправки email-подтверждения """
+    email = EmailField(required=True)
+
+class ResendVerificationEmailView(APIView):
+    """ Повторная отправка письма подтверждения email """
+    @extend_schema(
+        tags=["Авторизация"],
+        summary="Повторная отправка email-подтверждения",
+        description="Отправляет новую ссылку для подтверждения email.",
+        request=ResendVerificationSerializer,  # Добавлен корректный request body
+        responses={
+            200: {"message": "Новое письмо отправлено."},
+            400: {"error": "Email уже подтвержден или отправка слишком частая."},
+            404: {"error": "Пользователь не найден."},
+        },
+    )
+    def post(self, request):
+        serializer = ResendVerificationSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        email = serializer.validated_data["email"]
+
+        user = CustomUser.objects.filter(email=email).first()
+
+        if not user:
+            return Response({"error": "Пользователь не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.is_active:
+            return Response({"error": "Email уже подтвержден."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Проверяем, не было ли отправки письма недавно (лимит: 5 минут)
+        if user.verification_code_expiration and (now() - user.verification_code_expiration).seconds < 300:
+            return Response({"error": "Пожалуйста, подождите 5 минут перед повторной отправкой."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Генерируем новый код
+        verification_code = get_random_string(length=32)
+        user.verification_code = verification_code
+        user.verification_code_expiration = now() + timedelta(hours=24)
+        user.save()
+
+        # Отправляем новое письмо
+        confirmation_link = f"{settings.FRONTEND_URL}/api/confirm-email/{verification_code}"
+        subject = "Подтверждение вашего email"
+        message = f"""
+        Здравствуйте! 
+        Вы запросили повторное письмо для подтверждения email. 
+        Пройдите по ссылке, чтобы подтвердить ваш аккаунт: 
+
+        {confirmation_link}
+
+        Если вы не запрашивали подтверждение, проигнорируйте это письмо.
+        """
+
+        send_email_async.delay(subject, message, [user.email])
+
+        return Response({"message": "Новое письмо отправлено."}, status=status.HTTP_200_OK)
+
+class LoginView(APIView):
+    """ Вход в систему (по email и паролю) """
+
+    @extend_schema(
+        tags=["Авторизация"],
+        summary="Вход в систему",
+        description="Позволяет пользователю войти в систему по email и паролю.",
+        request=LoginSerializer,
+        responses={
+            200: OpenApiResponse(description="Успешный вход."),
+            400: OpenApiResponse(description="Неверные учетные данные."),
+        },
+    )
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data["user"]
+            refresh = RefreshToken.for_user(user)
+
+            return Response({
+                "message": "Вход выполнен успешно.",
+                "access_token": str(refresh.access_token),
+                "refresh_token": str(refresh),
+                "telegram_linked": bool(user.telegram_id),
+                "role": user.role
+            }, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class VerifyTelegramView(APIView):
+    """ Привязка Telegram после входа в профиле """
+    @extend_schema(
+        tags=["Авторизация"],
+        summary="Привязка Telegram",
+        description="Позволяет привязать Telegram к аккаунту после входа через email.",
+        request=None,
+        responses={
+            200: OpenApiResponse(description="Telegram привязан."),
+            400: OpenApiResponse(description="Ошибка."),
+        },
+    )
+    def post(self, request):
+        auth_data = request.data
+        telegram_id = auth_data["id"]
+        user = request.user
+
+        if user.telegram_id:
+            return Response({"message": "Telegram уже привязан."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.telegram_id = telegram_id
+        user.save()
+        return Response({"message": "Telegram привязан успешно."}, status=status.HTTP_200_OK)
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Смена пароля",
+        description="Позволяет сменить пароль, указав текущий пароль.",
+        request=ChangePasswordSerializer,
+        responses={200: {"message": "Пароль успешно изменен"}},
+    )
+    def post(self, request):
+        serializer = self.ChangePasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user = request.user
+
+            # Проверяем текущий пароль
+            if not user.check_password(serializer.validated_data["current_password"]):
+                return Response({"error": "Неверный текущий пароль."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Устанавливаем новый пароль
+            user.set_password(serializer.validated_data["new_password"])
+            user.save()
+
+            return Response({"message": "Пароль успешно изменен."}, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PsychologistChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Смена пароля для психолога",
+        request=PsychologistChangePasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Пароль успешно обновлён"),
+            400: OpenApiResponse(description="Ошибки валидации, например: пароли не совпадают или текущий неверный"),
+        }
+    )
+    def post(self, request):
+        serializer = PsychologistChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
 

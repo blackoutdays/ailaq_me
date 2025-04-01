@@ -77,12 +77,12 @@ urlpatterns = [
     path('telegram-auth/', TelegramAuthPageView.as_view(), name='telegram-auth-page'),
     # path('api/verify-telegram/', VerifyTelegramView.as_view(), name='link_telegram'),
 
-    #  Запись на быструю консультацию (только для зарегистрированных пользователей)
+    #  Запись на быструю консультацию (только для зарегистрированных клиентов)
     path("api/quick-consultation/", QuickClientConsultationAPIView.as_view(), name="quick_consultation"),
     path('api/quick-consultation-anonymous/', QuickClientConsultationAnonymousAPIView.as_view()),
     path('api/auth/telegram/link-consultation/', TelegramAuthLinkConsultationAPIView.as_view()),
 
-    # Заявки психолога
+    # Запись на консультацию к выбранному психологу
     path('api/session-request/authenticated/', AuthenticatedPsychologistSessionRequestView.as_view(), name='session-authenticated'),
     path('api/session-request/anonymous/', AnonymousPsychologistSessionRequestView.as_view(), name='session-anonymous'),
 
