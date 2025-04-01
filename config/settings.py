@@ -3,7 +3,7 @@ from datetime import timedelta
 import os
 import environ
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.ailaq.me")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://api.ailaq.me")
 
 env = environ.Env(
     DEBUG=(bool, False)
@@ -18,6 +18,7 @@ SECRET_KEY = env('SECRET_KEY', default='change-me')
 CSRF_TRUSTED_ORIGINS = [
     "https://ailaq.me",
     "https://www.ailaq.me",
+    "https://api.ailaq.me"
 ]
 
 DEBUG = env.bool("DEBUG", default=True)
