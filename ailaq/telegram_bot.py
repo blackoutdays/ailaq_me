@@ -379,9 +379,9 @@ async def process_review(update, context):
 def notify_all_psychologists(consultation):
     global bot
     psychologists = PsychologistProfile.objects.filter(
-        user__telegram_id__isnull=False,
-        application__status='APPROVED'
+        user__telegram_id__isnull=False
     ).select_related('user', 'application')
+    approved_psychologists = [p for p in psychologists if p.application and p.application.status == 'APPROVED']
 
     print(f"[TELEGRAM] Рассылка заявки {consultation.id} — психологов найдено: {psychologists.count()}")
     print(f"Всего профилей: {PsychologistProfile.objects.count()}")
@@ -400,7 +400,7 @@ def notify_all_psychologists(consultation):
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
     )
 
-    for p in psychologists:
+    for p in approved_psychologists:
         try:
             bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
