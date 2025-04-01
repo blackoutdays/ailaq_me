@@ -77,10 +77,18 @@ class RegisterUserView(APIView):
             user = serializer.save()
 
             if user.wants_to_be_psychologist:
-                # Если хочет быть психологом → создаём только заявку
+                # Пользователь хочет быть психологом → сразу помечаем его так
+                user.is_psychologist = True
+                user.save(update_fields=["is_psychologist"])
+
+                # Создаём заявку на модерацию
                 PsychologistApplication.objects.get_or_create(user=user, defaults={"status": "PENDING"})
+
+                # Создаём пустой профиль психолога (если у тебя есть отдельная модель)
+                PsychologistProfile.objects.get_or_create(user=user)
+
             else:
-                # Если обычный клиент → создаём профиль сразу
+                # Клиент → создаём профиль клиента
                 ClientProfile.objects.create(user=user)
 
             # Если через email → требуется подтверждение
@@ -221,50 +229,6 @@ class LoginView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        summary="Смена пароля",
-        description="Позволяет сменить пароль, указав текущий пароль.",
-        request=ChangePasswordSerializer,
-        responses={200: {"message": "Пароль успешно изменен"}},
-    )
-    def post(self, request):
-        serializer = self.ChangePasswordSerializer(data=request.data)
-        if serializer.is_valid():
-            user = request.user
-
-            # Проверяем текущий пароль
-            if not user.check_password(serializer.validated_data["current_password"]):
-                return Response({"error": "Неверный текущий пароль."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Устанавливаем новый пароль
-            user.set_password(serializer.validated_data["new_password"])
-            user.save()
-
-            return Response({"message": "Пароль успешно изменен."}, status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class PsychologistChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        tags=["Психолог"],
-        summary="Смена пароля для психолога",
-        request=PsychologistChangePasswordSerializer,
-        responses={
-            200: OpenApiResponse(description="Пароль успешно обновлён"),
-            400: OpenApiResponse(description="Ошибки валидации, например: пароли не совпадают или текущий неверный"),
-        }
-    )
-    def post(self, request):
-        serializer = PsychologistChangePasswordSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
-
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def get(self, request):
@@ -353,6 +317,52 @@ class VerifyTelegramView(APIView):
         user.telegram_id = telegram_id
         user.save()
         return Response({"message": "Telegram привязан успешно."}, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Смена пароля",
+        description="Позволяет сменить пароль, указав текущий пароль.",
+        request=ChangePasswordSerializer,
+        responses={200: {"message": "Пароль успешно изменен"}},
+    )
+    def post(self, request):
+        serializer = self.ChangePasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user = request.user
+
+            # Проверяем текущий пароль
+            if not user.check_password(serializer.validated_data["current_password"]):
+                return Response({"error": "Неверный текущий пароль."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Устанавливаем новый пароль
+            user.set_password(serializer.validated_data["new_password"])
+            user.save()
+
+            return Response({"message": "Пароль успешно изменен."}, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PsychologistChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Психолог"],
+        summary="Смена пароля для психолога",
+        request=PsychologistChangePasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Пароль успешно обновлён"),
+            400: OpenApiResponse(description="Ошибки валидации, например: пароли не совпадают или текущий неверный"),
+        }
+    )
+    def post(self, request):
+        serializer = PsychologistChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
+
 
 class QuickClientConsultationAPIView(APIView):
     permission_classes = [IsAuthenticated]
