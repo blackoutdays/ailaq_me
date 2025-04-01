@@ -2,18 +2,34 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Telegram Login (data-auth-url)</title>
+    <title>Вход через Telegram</title>
 </head>
 <body>
-    <h1>Telegram Login Widget (data-auth-url)</h1>
+    <h2>Кто вы?</h2>
+    <button onclick="initTelegramLogin(false)">Я клиент</button>
+    <button onclick="initTelegramLogin(true)">Я психолог</button>
 
-    <script async src="https://telegram.org/js/telegram-widget.js?22"
-        data-telegram-login="aqlaq_test_bot"
-        data-size="large"
-        data-userpic="true"
-        data-request-access="write"
-        data-lang="ru"
-        data-auth-url="https://www.ailaq.me/api/auth/telegram/">
+    <div id="telegram-login-placeholder" style="margin-top: 20px;"></div>
+
+    <script>
+        function initTelegramLogin(isPsychologist) {
+            const placeholder = document.getElementById('telegram-login-placeholder');
+            placeholder.innerHTML = '';
+
+            const script = document.createElement('script');
+            script.setAttribute('async', '');
+            script.src = "https://telegram.org/js/telegram-widget.js?22";
+            script.setAttribute('data-telegram-login', 'aqlaq_test_bot');
+            script.setAttribute('data-size', 'large');
+            script.setAttribute('data-userpic', 'true');
+            script.setAttribute('data-request-access', 'write');
+            script.setAttribute('data-lang', 'ru');
+
+            const authUrl = "https://www.ailaq.me/api/auth/telegram/?wants_to_be_psychologist=" + isPsychologist;
+            script.setAttribute('data-auth-url', authUrl);
+
+            placeholder.appendChild(script);
+        }
     </script>
 </body>
 </html>
