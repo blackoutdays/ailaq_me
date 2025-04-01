@@ -303,6 +303,7 @@ class TelegramAuthView(APIView):
             'access_token': str(refresh.access_token),
             'refresh_token': str(refresh),
             'user_id': user.id,
+            'role': user.role,
             'message': "Telegram успешно привязан",
         })
 
