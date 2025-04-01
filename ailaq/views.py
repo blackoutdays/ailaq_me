@@ -177,7 +177,7 @@ class QuickClientConsultationAPIView(APIView):
         )
 
         # 💥 Вот тут заменяем async_to_sync(...) на поток:
-        Thread(target=notify_all_psychologists, args=(consultation,)).start()
+        notify_all_psychologists(consultation)
 
         response_serializer = QuickClientConsultationRequestSerializer(consultation)
         return Response({

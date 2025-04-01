@@ -376,13 +376,15 @@ async def process_review(update, context):
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
-
 def notify_all_psychologists(consultation):
-    from .views import bot  # если не импортирован выше
+    from .views import bot  # убедитесь, что это работает
     psychologists = PsychologistProfile.objects.filter(
         user__telegram_id__isnull=False,
         application__status='APPROVED'
-    )
+    ).select_related('user', 'application')
+
+    logger.info(f"[TELEGRAM] Рассылка заявки {consultation.id} — психологов найдено: {psychologists.count()}")
+
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
         f"Язык: {consultation.psychologist_language}\n"
@@ -390,15 +392,15 @@ def notify_all_psychologists(consultation):
         f"Предпочтения: психолог {consultation.psychologist_gender}, "
         f"возраст: {consultation.preferred_psychologist_age}\n"
         f"Тема: {consultation.topic}\n"
-        f"Комментарий: {consultation.comments}\n\n"
-        f"Если вы подходите по критериям — ответьте /accept_{consultation.id}"
+        f"Комментарий: {consultation.comments or 'нет'}\n\n"
+        f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
     )
 
     for p in psychologists:
         try:
             bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
-            logging.error(f"Ошибка отправки психологу {p.user_id}: {e}")
+            logger.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
