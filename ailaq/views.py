@@ -281,7 +281,7 @@ class TelegramAuthView(APIView):
 
             if wants_to_be_psychologist:
                 PsychologistApplication.objects.create(user=user, status="PENDING")
-                user.is_psychologist = True
+                user.wants_to_be_psychologist = True
             else:
                 ClientProfile.objects.create(user=user)
                 user.is_psychologist = False
