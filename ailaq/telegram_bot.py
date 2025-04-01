@@ -520,7 +520,6 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_status_update_callback))
 
     # Обработка ввода текста
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_session_request))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_review))
     await application.run_polling()
 
