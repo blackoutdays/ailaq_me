@@ -61,8 +61,27 @@
 <script type="text/javascript">
   function onTelegramAuth(user) {
     alert('Logged in as ' + user.first_name + ' ' + user.last_name + ' (' + user.id + (user.username ? ', @' + user.username : '') + ')');
+    fetch("https://www.ailaq.me/api/auth/telegram/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        ...user,
+        wants_to_be_psychologist: isPsychologist
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.access_token) {
+        // Сохраняем токены или отправляем в main window
+        localStorage.setItem("access_token", data.access_token);
+        window.location.href = "https://www.ailaq.me/?token=" + data.access_token;
+      } else {
+        console.error("Ошибка Telegram авторизации", data);
+      }
+    });
   }
 </script>
 </body>
-
 </html>
