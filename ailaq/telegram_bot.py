@@ -28,7 +28,6 @@ import telegram
 
 from ailaq.models import Review, PsychologistProfile, ClientProfile
 bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
-logger = logging.getLogger(__name__)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -384,7 +383,7 @@ def notify_all_psychologists(consultation):
         application__status='APPROVED'
     ).select_related('user', 'application')
 
-    logger.info(f"[TELEGRAM] Рассылка заявки {consultation.id} — психологов найдено: {psychologists.count()}")
+    print(f"[TELEGRAM] Рассылка заявки {consultation.id} — психологов найдено: {psychologists.count()}")
 
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
@@ -401,7 +400,8 @@ def notify_all_psychologists(consultation):
         try:
             bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
-            logger.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+            print.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
