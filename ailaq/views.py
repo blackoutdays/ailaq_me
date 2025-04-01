@@ -2,7 +2,6 @@ import hmac
 import uuid
 from hashlib import sha256
 from threading import Thread
-
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View

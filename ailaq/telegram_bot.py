@@ -141,6 +141,21 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
         logging.error(f"\u274c Ошибка в callback accept_session: {e}")
         await query.message.reply_text("\u26a0\ufe0f Ошибка при принятии заявки")
 
+
+def send_telegram_message_sync(telegram_id, text):
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": telegram_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+    except Exception as e:
+        logging.error(f"Ошибка отправки сообщения Telegram ID {telegram_id}: {e}")
+
+
 def matches_age(birth_date, preferred_age):
     if not birth_date:
         return False
