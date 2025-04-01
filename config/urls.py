@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from ailaq.views import (
     LoginView, RegisterUserView, AdminApprovePsychologistView, PsychologistProfileView,
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
-    ReviewListView, TelegramAuthView, VerifyTelegramView, CatalogViewSet, ServicePriceView,
+    ReviewListView, TelegramAuthView, CatalogViewSet, ServicePriceView,
     PublicPsychologistProfileView,
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
     ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
@@ -38,12 +38,12 @@ urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # Регистрация и логин
-    path('api/register/', RegisterUserView.as_view(), name='register'),
-    path('api/login/', LoginView.as_view(), name='login'),
-    path("api/confirm-email/<str:verification_code>/", ConfirmEmailView.as_view(), name="confirm-email"),
-    path("api/resend-verification/", ResendVerificationEmailView.as_view(), name="resend-verification"),
-    path("psychologists/change-password/", PsychologistChangePasswordView.as_view(), name="psychologist-change-password"),
+    # # Регистрация и логин
+    # path('api/register/', RegisterUserView.as_view(), name='register'),
+    # path('api/login/', LoginView.as_view(), name='login'),
+    # path("api/confirm-email/<str:verification_code>/", ConfirmEmailView.as_view(), name="confirm-email"),
+    # path("api/resend-verification/", ResendVerificationEmailView.as_view(), name="resend-verification"),
+    # path("psychologists/change-password/", PsychologistChangePasswordView.as_view(), name="psychologist-change-password"),
 
     # Публичные эндпоинты для клиентов
     path('api/clients/me/', client_me, name='client-me'),
@@ -54,7 +54,7 @@ urlpatterns = [
     path('api/psychologists/<int:psychologist_id>/reviews/', PublicReviewListView.as_view(), name='public-reviews'),
     path('api/psychologists/<int:psychologist_id>/faq/', PublicFAQView.as_view(), name='public-faq'),
     path('api/psychologists/<int:psychologist_id>/profile/', PublicPsychologistProfileView.as_view(), name='public-psychologist-profile'),
-    path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    # path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
 
     # Психологи (Профиль, Обновление)
     path('api/psychologists/me/profile/', PsychologistSelfProfileView.as_view(), name='psychologist-self-profile'),
@@ -74,7 +74,8 @@ urlpatterns = [
 
     # Telegram API (Привязка и аутентификация)
     path('api/auth/telegram/', TelegramAuthView.as_view(), name='telegram_auth'),
-    path('api/verify-telegram/', VerifyTelegramView.as_view(), name='link_telegram'),
+    path('telegram-auth/', TelegramAuthPageView.as_view(), name='telegram-auth-page'),
+    # path('api/verify-telegram/', VerifyTelegramView.as_view(), name='link_telegram'),
 
     #  Запись на быструю консультацию (только для зарегистрированных пользователей)
     path("api/quick-consultation/", QuickClientConsultationAPIView.as_view(), name="quick_consultation"),
@@ -84,10 +85,6 @@ urlpatterns = [
     # Заявки психолога
     path('api/session-request/authenticated/', AuthenticatedPsychologistSessionRequestView.as_view(), name='session-authenticated'),
     path('api/session-request/anonymous/', AnonymousPsychologistSessionRequestView.as_view(), name='session-anonymous'),
-
-    # Запись на сеанс
-
-    path('telegram-auth/', TelegramAuthPageView.as_view(), name='telegram-auth-page'),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
