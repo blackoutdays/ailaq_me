@@ -47,7 +47,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 import telegram
 import logging
 
-from .telegram_bot import send_telegram_message, notify_psychologist_telegram, notify_all_psychologists
+from .telegram_bot import send_telegram_message, notify_psychologist_telegram
 from .models import PsychologistSessionRequest
 from .serializers import AnonymousSessionRequestSerializer, AuthenticatedSessionRequestSerializer
 
