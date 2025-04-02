@@ -601,5 +601,17 @@ class TelegramAuthSerializer(serializers.Serializer):
 
         return user
 
+# serializers.py
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
+
+User = get_user_model()
+
+class UserIdSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'is_psychologist']
+
+
 
 

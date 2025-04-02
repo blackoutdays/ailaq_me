@@ -1303,3 +1303,16 @@ class PsychologistChangePasswordView(APIView):
         serializer.save()
         return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
 
+# views.py
+from django.contrib.auth import get_user_model
+from rest_framework import generics
+from .serializers import UserIdSerializer
+
+User = get_user_model()
+
+class UserListView(generics.ListAPIView):
+    """
+    Эндпоинт для получения списка всех пользователей с их ID.
+    """
+    queryset = User.objects.all()
+    serializer_class = UserIdSerializer
