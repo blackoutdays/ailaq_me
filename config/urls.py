@@ -14,7 +14,7 @@ from ailaq.views import (
     ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
     QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView,
     TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView, PsychologistChangePasswordView,
-    AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView
+    AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView, UploadProfilePhotoView
 )
 from django.urls import path
 from ailaq.views import UserListView
@@ -65,6 +65,8 @@ urlpatterns = [
     path('api/psychologist/profile/qualification/', QualificationView.as_view(), name='qualification'),
     path('api/psychologist/profile/service_price/', ServicePriceView.as_view(), name='service-price'),
     path('api/psychologist/profile/faq/', FAQView.as_view(), name='faq'),
+    path('api/psychologist/profile/upload-photo/', UploadProfilePhotoView.as_view(), name='upload_profile_photo'),
+
     path('api/psychologist/profile/documents/', DocumentView.as_view(), name='documents'),
     path('api/users/', UserListView.as_view(), name='user-list'),
 

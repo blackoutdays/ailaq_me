@@ -1308,3 +1308,28 @@ class UserListView(generics.ListAPIView):
     """
     queryset = User.objects.all()
     serializer_class = UserIdSerializer
+
+class UploadProfilePhotoView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request):
+        # Получаем текущий профиль психолога
+        try:
+            profile = request.user.psychologist_profile
+        except PsychologistProfile.DoesNotExist:
+            return Response({"error": "Профиль психолога не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Получаем файл из запроса
+        file = request.FILES.get('profile_picture')
+        if not file:
+            return Response({"error": "Файл изображения не загружен."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Сохраняем фото в профиль
+        profile.profile_picture = file
+        profile.save()
+
+        # Возвращаем успешный ответ с URL фото
+        return Response({
+            "message": "Фото успешно загружено.",
+            "profile_picture_url": profile.profile_picture.url
+        }, status=status.HTTP_200_OK)
