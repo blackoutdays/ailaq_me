@@ -463,13 +463,22 @@ class CatalogSerializer(serializers.ModelSerializer):
 
 #для вьющек сериализаторы по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.ImageField(required=False, allow_null=True)
     class Meta:
         model = PsychologistApplication
         fields = [
             'first_name_ru', 'last_name_ru', 'middle_name_ru',
             'birth_date', 'gender', 'communication_language',
-            'service_countries', 'service_cities', 'telegram_id', 'about_me_ru', 'catalog_description_ru'
+            'service_countries', 'service_cities', 'telegram_id', 'about_me_ru', 'catalog_description_ru', 'profile_picture'
         ]
+
+    def update(self, instance, validated_data):
+        profile_picture = validated_data.pop('profile_picture', None)
+
+        if profile_picture:
+            instance.profile_picture = profile_picture
+
+        return super().update(instance, validated_data)
 
 class EducationDocumentSerializer(serializers.ModelSerializer):
     document = serializers.FileField(required=True)
