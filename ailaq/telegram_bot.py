@@ -376,18 +376,20 @@ async def process_review(update, context):
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
 
-def notify_all_psychologists(consultation):
-    global bot
+async def notify_all_psychologists(consultation):
     psychologists = PsychologistProfile.objects.filter(
         user__telegram_id__isnull=False
     ).select_related('user', 'application')
-    approved_psychologists = [p for p in psychologists if p.application and p.application.status == 'APPROVED']
+
+    approved_psychologists = [
+        p for p in psychologists if p.application and p.application.status == 'APPROVED'
+    ]
 
     print(f"[TELEGRAM] Рассылка заявки {consultation.id} — психологов найдено: {psychologists.count()}")
     print(f"Всего профилей: {PsychologistProfile.objects.count()}")
     print(f"С Telegram ID: {PsychologistProfile.objects.filter(user__telegram_id__isnull=False).count()}")
     print(f"С approved заявкой: {PsychologistProfile.objects.filter(application__status='APPROVED').count()}")
-    print(f"И того, кто получит уведомление: {psychologists.count()}")
+    print(f"Итого уведомлений: {len(approved_psychologists)}")
 
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
@@ -402,7 +404,7 @@ def notify_all_psychologists(consultation):
 
     for p in approved_psychologists:
         try:
-            bot.send_message(chat_id=p.user.telegram_id, text=message)
+            await bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
             print(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
 
