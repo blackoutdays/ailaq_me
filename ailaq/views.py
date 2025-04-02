@@ -19,7 +19,7 @@ from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramA
 from django.utils.timezone import now
 from django.shortcuts import get_object_or_404, render
 from rest_framework import status, viewsets
-from ailaq.tasks import send_email_async
+from ailaq.tasks import send_email_async, notify_all_psychologists_task
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.views import APIView
@@ -56,15 +56,6 @@ bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
-
-# @method_decorator(csrf_exempt, name='dispatch')
-# class TelegramAuthView(APIView):
-#     def get(self, request):
-#         print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.query_params}")
-#
-#         received_hash = request.query_params.get('hash')
-#         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
-#         auth_data = {k: request.query_params[k] for k in telegram_fields if k in request.query_params}
 
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
@@ -176,7 +167,7 @@ class QuickClientConsultationAPIView(APIView):
             telegram_id=user.telegram_id
         )
 
-        async_to_sync(notify_all_psychologists)(consultation)
+        notify_all_psychologists_task.delay(consultation.id)
 
         response_serializer = QuickClientConsultationRequestSerializer(consultation)
         return Response({
@@ -196,14 +187,13 @@ class QuickClientConsultationAnonymousAPIView(APIView):
     def post(self, request):
         serializer = QuickClientConsultationAnonymousSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        consultation = serializer.save()  # Без telegram_id
+        consultation = serializer.save()
 
-        # Генерируем токен (например, UUID)
         token = uuid.uuid4().hex
         consultation.client_token = token
         consultation.save()
 
-        notify_all_psychologists(consultation)
+        notify_all_psychologists_task.delay(consultation.id)
         response_data = serializer.data
         response_data['client_token'] = token
 
@@ -212,7 +202,7 @@ class QuickClientConsultationAnonymousAPIView(APIView):
             "consultation_request": response_data
         }, status=status.HTTP_201_CREATED)
 
-        # Сохраняем токен в cookie (опционально)
+        # Сохранение токен в cookie (опционально)
         response.set_cookie("client_token", token, httponly=True, max_age=86400)
 
         return response
@@ -325,7 +315,6 @@ class TelegramAuthLinkConsultationAPIView(APIView):
                 'username': auth_data.get('username', f"user_{telegram_id}"),
             }
         )
-
         # Привязываем Telegram к заявке
         consultation.telegram_id = telegram_id
         consultation.save()

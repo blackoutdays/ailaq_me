@@ -1,11 +1,22 @@
-from .models import PsychologistApplication, PsychologistLevel
+from asgiref.sync import async_to_sync
+
+from .models import PsychologistApplication, PsychologistLevel, QuickClientConsultationRequest
 from datetime import date
 from celery import shared_task
 import logging
 from django.core.mail import send_mail
 from django.conf import settings
 
+from .telegram_bot import notify_all_psychologists
+
 logger = logging.getLogger(__name__)
+
+
+@shared_task
+def notify_all_psychologists_task(consultation_id):
+    consultation = QuickClientConsultationRequest.objects.get(id=consultation_id)
+    async_to_sync(notify_all_psychologists)(consultation)
+
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 60})
 def send_email_async(self, subject, message, recipient_list, html_message=None):
