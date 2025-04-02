@@ -3,7 +3,8 @@ import os
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-django.setup()
+if not django.apps.apps.ready:
+    django.setup()
 
 import logging
 from datetime import datetime, timezone, timedelta
