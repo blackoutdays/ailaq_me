@@ -337,7 +337,7 @@ class PsychologistChangePasswordSerializer(serializers.Serializer):
         return user
 
 class PsychologistProfileSerializer(serializers.ModelSerializer):
-    profile_id = serializers.IntegerField(source="id", read_only=True)  # ID профиля психолога
+    profile_id = serializers.IntegerField(source="id", read_only=True)
     full_name = serializers.SerializerMethodField()
     age = serializers.SerializerMethodField()
     experience_years = serializers.IntegerField(source='application.experience_years', read_only=True)
@@ -345,7 +345,7 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
     city = serializers.CharField(source='application.service_cities', read_only=True)
     about_me = serializers.CharField(source='application.about_me_ru', read_only=True)
     qualification = serializers.CharField(source='application.qualification', read_only=True)
-    profile_picture_url = serializers.SerializerMethodField()  # URL для изображения профиля
+    profile_picture_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PsychologistProfile
@@ -370,7 +370,7 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
     def get_profile_picture_url(self, obj):
         """Возвращает URL фотографии профиля психолога"""
         if obj.profile_picture:
-            return obj.profile_picture.url  # Предполагаем, что `profile_picture` - это поле изображения
+            return f"{settings.MEDIA_URL}{obj.profile_picture}"
         return None
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
