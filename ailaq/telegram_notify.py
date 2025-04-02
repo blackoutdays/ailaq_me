@@ -11,7 +11,7 @@ bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
 async def get_approved_psychologists():
     psychologists = await sync_to_async(
-        lambda: PsychologistProfile.objects.filter(user__telegram_id__isnull=False).select_related('user', 'application')
+        lambda: list(PsychologistProfile.objects.filter(user__telegram_id__isnull=False).select_related('user', 'application'))
     )()
 
     approved_psychologists = [
