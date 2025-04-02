@@ -1,7 +1,10 @@
 import hmac
 import uuid
 from hashlib import sha256
-from threading import Thread
+
+from django.contrib.auth import get_user_model
+from rest_framework import generics
+from .serializers import UserIdSerializer
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -1303,12 +1306,6 @@ class PsychologistChangePasswordView(APIView):
         serializer.save()
         return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
 
-# views.py
-from django.contrib.auth import get_user_model
-from rest_framework import generics
-from .serializers import UserIdSerializer
-
-User = get_user_model()
 
 class UserListView(generics.ListAPIView):
     """

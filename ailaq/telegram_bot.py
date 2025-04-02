@@ -1,18 +1,13 @@
+import asyncio
+import os
+import django
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
+
 import logging
 from datetime import datetime, timezone, timedelta
-import os
-if "DJANGO_SETTINGS_MODULE" not in os.environ:
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-
-try:
-    import django
-    django.setup()
-except RuntimeError as e:
-    if str(e) != "populate() isn't reentrant":
-        raise
-
 import nest_asyncio
-import asyncio
 nest_asyncio.apply()
 
 import requests
