@@ -5,12 +5,11 @@ from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
 
-from ailaq.models import PsychologistProfile, PsychologistSessionRequest
+from ailaq.models import PsychologistProfile
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
-async def notify_all_psychologists(consultation):
-    # Асинхронный запрос к базе данных
+async def get_approved_psychologists():
     psychologists = await sync_to_async(
         lambda: PsychologistProfile.objects.filter(user__telegram_id__isnull=False).select_related('user', 'application')
     )()
@@ -18,6 +17,11 @@ async def notify_all_psychologists(consultation):
     approved_psychologists = [
         p for p in psychologists if p.application and p.application.status == 'APPROVED'
     ]
+    return approved_psychologists
+
+async def notify_all_psychologists(consultation):
+    # Получаем одобренных психологов
+    approved_psychologists = await get_approved_psychologists()
 
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
@@ -34,4 +38,4 @@ async def notify_all_psychologists(consultation):
         try:
             await bot.send_message(chat_id=p.user.telegram_id, text=message)
         except Exception as e:
-            logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+            print(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
