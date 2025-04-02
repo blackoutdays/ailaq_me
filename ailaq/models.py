@@ -404,7 +404,7 @@ class PsychologistProfile(models.Model):
     requests_count = models.PositiveIntegerField(default=0)
     is_verified = models.BooleanField(default=False)
 
-    profile_picture = models.ImageField(upload_to='psychologists_profiles/', null=True, blank=True, verbose_name="Фото профиля")
+    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
 
     def __str__(self):
         return f"Психолог: {self.user.email} (Баланс: {self.balance})"
