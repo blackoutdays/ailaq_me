@@ -90,7 +90,8 @@ async def handle_status_update_callback(update, context):
         logging.error(f"Ошибка обработки статуса: {e}")
         await query.edit_message_text("\u2757 Ошибка обработки действия. Попробуйте позже.")
 
-async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def handle_accept_callback(update, context):
     query = update.callback_query
     await query.answer()
 
@@ -110,7 +111,7 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
             )
             await bot.send_message(
                 chat_id=query.from_user.id,
-                text="\u26d4\ufe0f Эта заявка уже была принята другим психологом."
+                text="⛔️ Эта заявка уже была принята другим психологом."
             )
             return
 
@@ -118,7 +119,7 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
         session.status = "CONTACTED"
         await sync_to_async(session.save)()
 
-        new_text = query.message.text + "\n\n\ud83c\udf89 Заявка принята!"
+        new_text = query.message.text + "\n\n🎉 Заявка принята!"
         await bot.edit_message_text(
             chat_id=query.message.chat_id,
             message_id=query.message.message_id,
@@ -129,19 +130,17 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
         await bot.send_message(
             chat_id=query.from_user.id,
             text=(
-                f"\ud83d\udce2 Вы приняли заявку!\n"
-                f"\ud83d\udc64 Клиент: {session.client_name}\n"
-                f"\ud83c\udf10 Telegram ID: {session.telegram_id}\n"
-                f"\ud83d\udc81\u200d\u2642\ufe0f Тема: {session.topic}\n"
-                f"\ud83d\udcac {session.comments or 'нет'}"
-            ),
-            reply_markup=build_status_update_keyboard(session.id)
+                f"📢 Вы приняли заявку!"
+                f"👤 Клиент: {session.client_name}"
+                f"🌐 Telegram ID: {session.telegram_id}"
+                f"🧠 Тема: {session.topic}"
+                f"💬 {session.comments or 'нет'}"
+            )
         )
 
     except Exception as e:
-        logging.error(f"\u274c Ошибка в callback accept_session: {e}")
-        await query.message.reply_text("\u26a0\ufe0f Ошибка при принятии заявки")
-
+        logging.error(f"❌ Ошибка в callback accept_session: {e}")
+        await query.message.reply_text("⚠️ Ошибка при принятии заявки")
 
 def send_telegram_message_sync(telegram_id, text):
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
