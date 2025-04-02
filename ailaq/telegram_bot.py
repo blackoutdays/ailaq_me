@@ -1,12 +1,11 @@
-import asyncio
 import os
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-if not django.apps.apps.ready:
-    django.setup()
+django.setup()
 
 import logging
+import asyncio
 from datetime import datetime, timezone, timedelta
 import nest_asyncio
 nest_asyncio.apply()

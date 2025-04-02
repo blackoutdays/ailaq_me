@@ -1306,7 +1306,6 @@ class PsychologistChangePasswordView(APIView):
         serializer.save()
         return Response({"detail": "Пароль успешно обновлён"}, status=status.HTTP_200_OK)
 
-
 class UserListView(generics.ListAPIView):
     """
     Эндпоинт для получения списка всех пользователей с их ID.
