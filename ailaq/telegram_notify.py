@@ -37,5 +37,6 @@ async def notify_all_psychologists(consultation):
     for p in approved_psychologists:
         try:
             await bot.send_message(chat_id=p.user.telegram_id, text=message)
+            logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
         except Exception as e:
-            print(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+            logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
