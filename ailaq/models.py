@@ -185,7 +185,7 @@ class EducationDocument(models.Model):
 class PsychologistApplication(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
 
-    profile_picture = models.ImageField(upload_to='psychologists/', null=True, blank=True, verbose_name="Фото профиля")
+    profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
 
     # Личная информация
     first_name_ru = models.CharField(max_length=50, null=True, blank=True)
