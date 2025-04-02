@@ -7,12 +7,11 @@ import logging
 from django.core.mail import send_mail
 from django.conf import settings
 
-from .telegram_notify import notify_all_psychologists
-
 logger = logging.getLogger(__name__)
 
 @shared_task
 def notify_all_psychologists_task(consultation_id):
+    from .telegram_notify import notify_all_psychologists
     consultation = QuickClientConsultationRequest.objects.get(id=consultation_id)
     async_to_sync(notify_all_psychologists)(consultation)
 

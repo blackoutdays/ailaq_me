@@ -1,6 +1,5 @@
 # ailaq/telegram_notify.py
 from telegram import Bot
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from django.conf import settings
 from ailaq.models import PsychologistProfile
 
