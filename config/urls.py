@@ -16,6 +16,8 @@ from ailaq.views import (
     TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView, PsychologistChangePasswordView,
     AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView
 )
+from django.urls import path
+from ailaq.views import UserListView
 
 router = DefaultRouter()
 router.register(r'catalog', CatalogViewSet, basename='catalog')
@@ -64,6 +66,8 @@ urlpatterns = [
     path('api/psychologist/profile/service_price/', ServicePriceView.as_view(), name='service-price'),
     path('api/psychologist/profile/faq/', FAQView.as_view(), name='faq'),
     path('api/psychologist/profile/documents/', DocumentView.as_view(), name='documents'),
+    path('api/users/', UserListView.as_view(), name='user-list'),
+
 
     # Каталог и одобрение психологов
     path('api/admin/approve-psychologist/<int:psychologist_id>/', AdminApprovePsychologistView.as_view(), name='admin_approve_psychologist'),
