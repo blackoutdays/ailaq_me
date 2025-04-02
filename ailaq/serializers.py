@@ -370,7 +370,7 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
     def get_profile_picture_url(self, obj):
         """Возвращает URL фотографии профиля психолога"""
         if obj.profile_picture:
-            return f"{settings.MEDIA_URL}{obj.profile_picture}"
+            return obj.profile_picture.url
         return None
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):

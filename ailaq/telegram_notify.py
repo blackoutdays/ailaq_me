@@ -1,14 +1,17 @@
 # ailaq/telegram_notify.py
 from telegram import Bot
 from django.conf import settings
+from asgiref.sync import sync_to_async
+
+from ailaq.models import PsychologistProfile
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
 async def notify_all_psychologists(consultation):
-    from ailaq.models import PsychologistProfile
-    psychologists = PsychologistProfile.objects.filter(
-        user__telegram_id__isnull=False
-    ).select_related('user', 'application')
+    # Используйте sync_to_async для асинхронных запросов к базе данных
+    psychologists = await sync_to_async(
+        lambda: PsychologistProfile.objects.filter(user__telegram_id__isnull=False).select_related('user', 'application')
+    )()
 
     approved_psychologists = [
         p for p in psychologists if p.application and p.application.status == 'APPROVED'
