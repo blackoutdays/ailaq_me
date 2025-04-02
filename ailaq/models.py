@@ -185,6 +185,8 @@ class EducationDocument(models.Model):
 class PsychologistApplication(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
 
+    profile_picture = models.ImageField(upload_to='psychologists/', null=True, blank=True, verbose_name="Фото профиля")
+
     # Личная информация
     first_name_ru = models.CharField(max_length=50, null=True, blank=True)
     last_name_ru = models.CharField(max_length=50, null=True, blank=True)
@@ -401,6 +403,8 @@ class PsychologistProfile(models.Model):
     is_in_catalog = models.BooleanField(default=False)
     requests_count = models.PositiveIntegerField(default=0)
     is_verified = models.BooleanField(default=False)
+
+    profile_picture = models.ImageField(upload_to='psychologists_profiles/', null=True, blank=True, verbose_name="Фото профиля")
 
     def __str__(self):
         return f"Психолог: {self.user.email} (Баланс: {self.balance})"

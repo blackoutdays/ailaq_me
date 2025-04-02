@@ -451,9 +451,7 @@ class ClientMeViewSet(viewsets.ViewSet):
         return Response({"detail": "Удаление профиля запрещено."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 class PublicPsychologistProfileView(APIView):
-    """
-    🔹 Публичный API для получения профиля психолога (для клиентов)
-    """
+    """ Публичный API для получения профиля психолога (для клиентов) """
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -467,9 +465,7 @@ class PublicPsychologistProfileView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class PublicQualificationView(APIView):
-    """
-    🔹 Позволяет всем пользователям (и клиентам) получать квалификацию психолога.
-    """
+    """ Позволяет всем пользователям (и клиентам) получать квалификацию психолога """
     permission_classes = [AllowAny]
 
     @extend_schema(

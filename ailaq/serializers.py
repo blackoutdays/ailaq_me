@@ -345,10 +345,11 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
     city = serializers.CharField(source='application.service_cities', read_only=True)
     about_me = serializers.CharField(source='application.about_me_ru', read_only=True)
     qualification = serializers.CharField(source='application.qualification', read_only=True)
+    profile_picture_url = serializers.SerializerMethodField()  # URL для изображения профиля
 
     class Meta:
         model = PsychologistProfile
-        fields = ['profile_id', 'full_name', 'age', 'qualification', 'experience_years', 'country', 'city', 'about_me']
+        fields = ['profile_id', 'full_name', 'age', 'qualification', 'experience_years', 'country', 'city', 'about_me', 'profile_picture_url']
 
     def get_full_name(self, obj):
         """Получает полное имя психолога"""
@@ -366,13 +367,20 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
             return today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
         return None
 
+    def get_profile_picture_url(self, obj):
+        """Возвращает URL фотографии профиля психолога"""
+        if obj.profile_picture:
+            return obj.profile_picture.url  # Предполагаем, что `profile_picture` - это поле изображения
+        return None
+
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
     user = serializers.ReadOnlyField(source="user.email")
+    profile_picture_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PsychologistApplication
         fields = [
-         'user', 'first_name_ru', 'last_name_ru', 'gender', 'qualification', 'is_verified', 'is_in_catalog', 'status'
+         'user', 'first_name_ru', 'last_name_ru', 'gender', 'qualification', 'is_verified', 'is_in_catalog', 'status', 'profile_picture_url'
         ]
         read_only_fields = ['user', 'status']
 
@@ -385,6 +393,12 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+
+    def get_profile_picture_url(self, obj):
+        """Получает URL фото профиля психолога, если оно существует"""
+        if obj.profile_picture:
+            return obj.profile_picture.url
+        return None
 
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:
