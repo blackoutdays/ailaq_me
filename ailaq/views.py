@@ -196,14 +196,13 @@ class QuickClientConsultationAnonymousAPIView(APIView):
     def post(self, request):
         serializer = QuickClientConsultationAnonymousSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        consultation = serializer.save()  # Без telegram_id
+        consultation = serializer.save()
 
-        # Генерируем токен (например, UUID)
         token = uuid.uuid4().hex
         consultation.client_token = token
         consultation.save()
 
-        notify_all_psychologists(consultation)
+        async_to_sync(notify_all_psychologists)(consultation)
         response_data = serializer.data
         response_data['client_token'] = token
 
@@ -212,7 +211,7 @@ class QuickClientConsultationAnonymousAPIView(APIView):
             "consultation_request": response_data
         }, status=status.HTTP_201_CREATED)
 
-        # Сохраняем токен в cookie (опционально)
+        # Сохранение токен в cookie (опционально)
         response.set_cookie("client_token", token, httponly=True, max_age=86400)
 
         return response
