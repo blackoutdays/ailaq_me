@@ -1,12 +1,14 @@
-import logging
-from datetime import datetime, timezone, timedelta
+import asyncio
 import os
 import django
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-django.setup()
 
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+if not django.apps.apps.ready:
+    django.setup()
+
+import logging
+from datetime import datetime, timezone, timedelta
 import nest_asyncio
-import asyncio
 nest_asyncio.apply()
 
 import requests
@@ -375,38 +377,6 @@ async def process_review(update, context):
         await update.message.reply_text("✅ Спасибо! Ваш отзыв сохранён и передан психологу.")
     else:
         await update.message.reply_text("❗ Сначала введите оценку от 1 до 5.")
-
-async def notify_all_psychologists(consultation):
-    psychologists = PsychologistProfile.objects.filter(
-        user__telegram_id__isnull=False
-    ).select_related('user', 'application')
-
-    approved_psychologists = [
-        p for p in psychologists if p.application and p.application.status == 'APPROVED'
-    ]
-
-    print(f"[TELEGRAM] Рассылка заявки {consultation.id} — психологов найдено: {psychologists.count()}")
-    print(f"Всего профилей: {PsychologistProfile.objects.count()}")
-    print(f"С Telegram ID: {PsychologistProfile.objects.filter(user__telegram_id__isnull=False).count()}")
-    print(f"С approved заявкой: {PsychologistProfile.objects.filter(application__status='APPROVED').count()}")
-    print(f"Итого уведомлений: {len(approved_psychologists)}")
-
-    message = (
-        f"🆕 Новая заявка на быструю консультацию\n"
-        f"Язык: {consultation.psychologist_language}\n"
-        f"Пол клиента: {consultation.gender}, возраст: {consultation.age}\n"
-        f"Предпочтения: психолог {consultation.psychologist_gender}, "
-        f"возраст: {consultation.preferred_psychologist_age}\n"
-        f"Тема: {consultation.topic}\n"
-        f"Комментарий: {consultation.comments or 'нет'}\n\n"
-        f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
-    )
-
-    for p in approved_psychologists:
-        try:
-            await bot.send_message(chat_id=p.user.telegram_id, text=message)
-        except Exception as e:
-            print(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
 
 async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
