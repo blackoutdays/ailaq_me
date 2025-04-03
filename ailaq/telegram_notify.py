@@ -14,9 +14,14 @@ async def get_approved_psychologists():
         lambda: list(PsychologistProfile.objects.filter(user__telegram_id__isnull=False).select_related('user', 'application'))
     )()
 
+    logging.info(f"Найдено психологов с Telegram ID: {len(psychologists)}")
+
     approved_psychologists = [
         p for p in psychologists if p.application and p.application.status == 'APPROVED'
     ]
+
+    logging.info(f"Одобренных психологов: {len(approved_psychologists)}")
+
     return approved_psychologists
 
 async def notify_all_psychologists(consultation):
