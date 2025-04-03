@@ -59,6 +59,7 @@ urlpatterns = [
     # path('api/change-password/', ChangePasswordView.as_view(), name='change-password'),
 
     # Психологи (Профиль, Обновление)
+
     path('api/psychologists/me/profile/', PsychologistSelfProfileView.as_view(), name='psychologist-self-profile'),
     path('api/psychologist/profile/', PsychologistProfileView.as_view(), name='psychologist-profile'),
     path('api/psychologist/profile/personal-info/', PersonalInfoView.as_view(), name='personal-info'),
@@ -69,7 +70,6 @@ urlpatterns = [
 
     path('api/psychologist/profile/documents/', DocumentView.as_view(), name='documents'),
     path('api/users/', UserListView.as_view(), name='user-list'),
-
 
     # Каталог и одобрение психологов
     path('api/admin/approve-psychologist/<int:psychologist_id>/', AdminApprovePsychologistView.as_view(), name='admin_approve_psychologist'),
@@ -92,6 +92,7 @@ urlpatterns = [
     path('api/session-request/authenticated/', AuthenticatedPsychologistSessionRequestView.as_view(), name='session-authenticated'),
     path('api/session-request/anonymous/', AnonymousPsychologistSessionRequestView.as_view(), name='session-anonymous'),
 
+    *router.urls
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Добавление обработки медиафайлов в режиме DEBUG

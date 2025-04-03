@@ -366,9 +366,7 @@ class CatalogViewSet(ReadOnlyModelViewSet):
         return super().list(request, *args, **kwargs)
 
 class ClientMeViewSet(viewsets.ViewSet):
-    """
-    ViewSet для работы с профилем текущего клиента без передачи ID в URL.
-    """
+    """ ViewSet для работы с профилем текущего клиента без передачи ID в URL """
 
     permission_classes = [IsAuthenticated]
 
