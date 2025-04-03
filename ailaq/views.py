@@ -334,7 +334,7 @@ class CatalogPagination(PageNumberPagination):
     max_page_size = 100
 
 class CatalogViewSet(ReadOnlyModelViewSet):
-    """Каталог психологов с фильтрацией, сортировкой и пагинацией """
+    """Каталог психологов с фильтрацией, сортировкой и пагинацией"""
     queryset = PsychologistProfile.objects.filter(is_in_catalog=True).select_related('application')
     serializer_class = CatalogSerializer
     pagination_class = CatalogPagination
