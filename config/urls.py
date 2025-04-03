@@ -91,9 +91,9 @@ urlpatterns = [
     # Запись на консультацию к выбранному психологу
     path('api/session-request/authenticated/', AuthenticatedPsychologistSessionRequestView.as_view(), name='session-authenticated'),
     path('api/session-request/anonymous/', AnonymousPsychologistSessionRequestView.as_view(), name='session-anonymous'),
+    path('api/catalog/', CatalogViewSet.as_view({'get': 'list'}), name='catalog-list'),
 
-    *router.urls
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Добавление обработки медиафайлов в режиме DEBUG
 if settings.DEBUG:
