@@ -2,6 +2,7 @@ from django_filters import rest_framework as filters
 from ailaq.models import PsychologistProfile
 
 class PsychologistProfileFilter(filters.FilterSet):
+    full_name = filters.CharFilter(field_name="get_full_name", lookup_expr="icontains", label="Поиск по имени")
     gender = filters.CharFilter(field_name="application__gender", lookup_expr="iexact")
     min_price = filters.NumberFilter(method="filter_min_price")
     max_price = filters.NumberFilter(method="filter_max_price")

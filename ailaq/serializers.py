@@ -407,9 +407,7 @@ class TopicSerializer(serializers.ModelSerializer):
 
 class CatalogSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source='user.id', read_only=True)
-    first_name_ru = serializers.SerializerMethodField()
-    last_name_ru = serializers.SerializerMethodField()
-    middle_name_ru = serializers.SerializerMethodField()
+    full_name_ru = serializers.SerializerMethodField()
     qualification = serializers.SerializerMethodField()
     academic_degree = serializers.SerializerMethodField()
     catalog_description_ru = serializers.SerializerMethodField()
@@ -421,9 +419,7 @@ class CatalogSerializer(serializers.ModelSerializer):
         model = PsychologistProfile
         fields = [
             'user_id',
-            'first_name_ru',
-            'last_name_ru',
-            'middle_name_ru',
+            'full_name_ru',
             'qualification',
             'academic_degree',
             'catalog_description_ru',
@@ -434,14 +430,8 @@ class CatalogSerializer(serializers.ModelSerializer):
             'reviews_count',
         ]
 
-    def get_first_name_ru(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'first_name_ru', None) if obj.application else None
-
-    def get_last_name_ru(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'last_name_ru', None) if obj.application else None
-
-    def get_middle_name_ru(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'middle_name_ru', None) if obj.application else None
+    def get_full_name_ru(self, obj):
+        return obj.get_full_name()
 
     def get_qualification(self, obj) -> Optional[str]:
         return getattr(obj.application, 'qualification', None) if obj.application else None
