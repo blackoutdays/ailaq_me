@@ -461,7 +461,7 @@ class PsychologistProfile(models.Model):
         full_name = self.get_full_name
         average_rating = Review.objects.filter(
             psychologist_name=full_name,
-            session_request__status='COMPLETED'
+            session_request__status='COMPLETED'  # Фильтруем по session_request
         ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0.0
 
         return round(average_rating, 1)
@@ -476,19 +476,20 @@ class PsychologistProfile(models.Model):
 
         return all(bool(value) for value in required_fields)
 
-    def get_reviews_count(self) -> int:
-        """Возвращает количество завершённых отзывов"""
-        return Review.objects.filter(psychologist=self, session__status='COMPLETED').count()
-
     def update_catalog_visibility(self):
         """Психолог попадает в каталог, если у него >=3 покупок и >=3 оценённых отзывов."""
         if self.application:
             self.is_in_catalog = (
                     self.is_verified and
                     self.application.purchased_applications >= 3 and
-                    Review.objects.filter(psychologist=self, session__status='COMPLETED', rating__gt=0).count() >= 3
+                    Review.objects.filter(psychologist=self, session_request__status='COMPLETED',
+                                          rating__gt=0).count() >= 3
             )
             self.save(update_fields=["is_in_catalog"])
+
+    def get_reviews_count(self) -> int:
+        """Возвращает количество завершённых отзывов"""
+        return Review.objects.filter(psychologist=self, session_request__status='COMPLETED').count()
 
     def update_requests_count(self):
         from ailaq.models import PsychologistSessionRequest, QuickClientConsultationRequest
@@ -524,18 +525,6 @@ def save(self, *args, **kwargs):
     # Если это новая заявка и она сразу "APPROVED" → создаём профиль
     if self.pk and (old_status is None or old_status == "PENDING") and self.status == "APPROVED":
         PsychologistProfile.process_psychologist_application(self.id)
-
-# class PurchasedRequest(models.Model):
-#     psychologist = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-#     cost = models.DecimalField(
-#         max_digits=10,
-#         decimal_places=2,
-#         default=get_default_cost
-#     )
-#     created_at = models.DateTimeField(default=now)
-#
-#     def __str__(self):
-#         return f"Purchase #{self.id} by {self.psychologist.email} on {self.created_at}"
 
 # отзыв за проведенную сессию
 class Review(models.Model):
