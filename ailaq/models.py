@@ -447,17 +447,20 @@ class PsychologistProfile(models.Model):
             logger.error(f"Application with ID {application_id} not found.")
 
     @property
-    def full_name(self):
+    def get_full_name(self):
         """Возвращает полное имя психолога: фамилия, имя, отчество"""
-        first_name = self.application.first_name_ru if self.application else ''
-        last_name = self.application.last_name_ru if self.application else ''
-        middle_name = self.application.middle_name_ru if self.application else ''
+        if not self.application:
+            return 'Неизвестно'
+        first_name = self.application.first_name_ru or 'Неизвестно'
+        last_name = self.application.last_name_ru or 'Неизвестно'
+        middle_name = self.application.middle_name_ru or 'Неизвестно'
         return f"{last_name} {first_name} {middle_name}".strip()
 
     def get_average_rating(self) -> float:
         """Возвращает средний рейтинг психолога на основе завершённых сессий."""
+        full_name = self.get_full_name
         average_rating = Review.objects.filter(
-            psychologist_name=self.get_full_name(),  # Используйте метод get_full_name() для получения полного имени
+            psychologist_name=full_name,
             session__status='COMPLETED'
         ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0.0
 
