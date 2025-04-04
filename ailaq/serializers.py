@@ -435,28 +435,28 @@ class CatalogSerializer(serializers.ModelSerializer):
         ]
 
     def get_first_name_ru(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'first_name_ru', None)
+        return getattr(obj.application, 'first_name_ru', None) if obj.application else None
 
     def get_last_name_ru(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'last_name_ru', None)
+        return getattr(obj.application, 'last_name_ru', None) if obj.application else None
 
     def get_middle_name_ru(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'middle_name_ru', None)
+        return getattr(obj.application, 'middle_name_ru', None) if obj.application else None
 
     def get_qualification(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'qualification', None)
+        return getattr(obj.application, 'qualification', None) if obj.application else None
 
     def get_academic_degree(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'academic_degree', None)
+        return getattr(obj.application, 'academic_degree', None) if obj.application else None
 
     def get_catalog_description_ru(self, obj) -> Optional[str]:
-        return getattr(obj.application, 'catalog_description_ru', None)
+        return getattr(obj.application, 'catalog_description_ru', None) if obj.application else None
 
     def get_session_price(self, obj) -> Optional[float]:
-        # Пример получения цены из JSON
-        session_data = obj.application.service_sessions
-        if session_data:
-            return session_data[0].get("price")  # Должен вернуть цену первой сессии
+        if obj.application:
+            session_data = obj.application.service_sessions
+            if session_data:
+                return session_data[0].get("price")  # Должен вернуть цену первой сессии
         return None
 
     def get_average_rating(self, obj) -> Optional[float]:
