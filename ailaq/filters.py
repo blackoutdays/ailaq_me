@@ -8,6 +8,8 @@ class PsychologistProfileFilter(filters.FilterSet):
     city = filters.CharFilter(field_name="application__city", lookup_expr="icontains")
     is_verified = filters.BooleanFilter(field_name="is_verified")
     communication_language = filters.CharFilter(field_name="application__communication_language", lookup_expr="iexact")
+    specialization = filters.CharFilter(field_name="application__qualification", lookup_expr="icontains")
+    session_format = filters.ChoiceFilter(choices=[('ONLINE', 'Онлайн'), ('OFFLINE', 'Оффлайн')], label='Формат сессии')
 
     class Meta:
         model = PsychologistProfile
@@ -16,6 +18,8 @@ class PsychologistProfileFilter(filters.FilterSet):
             "city",
             "is_verified",
             "communication_language",
+            "specialization",
+            "session_format",
         ]
 
     def filter_min_price(self, queryset, name, value):

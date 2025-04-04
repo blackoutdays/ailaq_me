@@ -327,12 +327,12 @@ class TelegramAuthLinkConsultationAPIView(APIView):
             'consultation_id': consultation.id
         })
 
-# Список психологов с фильтрацией каталог
 class CatalogPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 100
 
+# Представление каталога психологов
 class CatalogViewSet(ReadOnlyModelViewSet):
     """Каталог психологов с фильтрацией, сортировкой и пагинацией"""
     queryset = PsychologistProfile.objects.filter(is_in_catalog=True).select_related('application')
@@ -342,8 +342,6 @@ class CatalogViewSet(ReadOnlyModelViewSet):
 
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = {
-        'is_verified': ['exact'],
-        'is_in_catalog': ['exact'],
         'requests_count': ['gte', 'lte'],
     }
     ordering_fields = ['application__id', 'requests_count']
@@ -353,8 +351,6 @@ class CatalogViewSet(ReadOnlyModelViewSet):
         tags=["Каталог психологов"],
         description="Получить список психологов с фильтрацией, сортировкой и пагинацией.",
         parameters=[
-            OpenApiParameter("is_verified", description="Фильтр по верификации (true/false)", required=False, type=bool),
-            OpenApiParameter("is_in_catalog", description="Фильтр по наличию в каталоге (true/false)", required=False, type=bool),
             OpenApiParameter("requests_count__gte", description="Минимальное количество запросов", required=False, type=int),
             OpenApiParameter("requests_count__lte", description="Максимальное количество запросов", required=False, type=int),
             OpenApiParameter("ordering", description="Сортировка (application__id, requests_count)", required=False, type=str),

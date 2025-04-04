@@ -453,7 +453,11 @@ class CatalogSerializer(serializers.ModelSerializer):
         return getattr(obj.application, 'catalog_description_ru', None)
 
     def get_session_price(self, obj) -> Optional[float]:
-        return getattr(obj.application, 'session_price', None)
+        # Пример получения цены из JSON
+        session_data = obj.application.service_sessions
+        if session_data:
+            return session_data[0].get("price")  # Должен вернуть цену первой сессии
+        return None
 
     def get_average_rating(self, obj) -> Optional[float]:
         return obj.get_average_rating()
