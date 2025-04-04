@@ -407,7 +407,7 @@ class TopicSerializer(serializers.ModelSerializer):
 
 class CatalogSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source='user.id', read_only=True)
-    full_name = serializers.ReadOnlyField(source='full_name')  # Использование объединенного имени
+    full_name = serializers.ReadOnlyField()
     qualification = serializers.SerializerMethodField()
     academic_degree = serializers.SerializerMethodField()
     catalog_description_ru = serializers.SerializerMethodField()
