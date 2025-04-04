@@ -449,7 +449,8 @@ class PsychologistProfile(models.Model):
     def get_average_rating(self) -> float:
         """Возвращает средний рейтинг психолога на основе завершённых сессий."""
         average_rating = Review.objects.filter(
-            psychologist=self, session__status='COMPLETED'
+            psychologist_name=self.user.get_full_name(),
+            session__status='COMPLETED'
         ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0.0
 
         return round(average_rating, 1)
