@@ -511,9 +511,7 @@ class PublicReviewListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 class PublicFAQView(APIView):
-    """
-    🔹 Клиенты могут просматривать FAQ психолога.
-    """
+    """ Клиенты могут просматривать FAQ психолога """
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -529,9 +527,7 @@ class PublicFAQView(APIView):
 
 # Получение профиля психолога
 class PsychologistSelfProfileView(APIView):
-    """
-    API для получения и редактирования личного профиля психолога
-    """
+    """ API для получения и редактирования личного профиля психолога """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -550,9 +546,7 @@ class PsychologistSelfProfileView(APIView):
 
 # Получение полного профиля психолога
 class PsychologistProfileView(APIView):
-    """
-    Получает весь профиль психолога, включая отзывы.
-    """
+    """ Получает весь профиль психолога, включая отзывы """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -820,9 +814,7 @@ class ServicePriceSessionDetailView(APIView):
 
 # Сохранение и получение FAQ психолога
 class FAQView(APIView):
-    """
-    Получение и сохранение FAQ психолога.
-    """
+    """ Получение и сохранение FAQ психолога """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -902,7 +894,7 @@ class DocumentView(APIView):
             return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
 
 class ReviewListView(APIView):
-    """Получение списка отзывов о психологе"""
+    """ Получение списка отзывов о психологе """
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -1053,7 +1045,6 @@ class TopicListView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 ### delete later
-
 class RegisterUserView(APIView):
     """
     Регистрация пользователей:
