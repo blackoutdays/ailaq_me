@@ -407,7 +407,7 @@ class TopicSerializer(serializers.ModelSerializer):
 
 class CatalogSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source='user.id', read_only=True)
-    full_name_ru = serializers.SerializerMethodField()
+    full_name = serializers.ReadOnlyField(source='full_name')  # Использование объединенного имени
     qualification = serializers.SerializerMethodField()
     academic_degree = serializers.SerializerMethodField()
     catalog_description_ru = serializers.SerializerMethodField()
@@ -419,7 +419,7 @@ class CatalogSerializer(serializers.ModelSerializer):
         model = PsychologistProfile
         fields = [
             'user_id',
-            'full_name_ru',
+            'full_name',
             'qualification',
             'academic_degree',
             'catalog_description_ru',
@@ -429,9 +429,6 @@ class CatalogSerializer(serializers.ModelSerializer):
             'average_rating',
             'reviews_count',
         ]
-
-    def get_full_name_ru(self, obj):
-        return obj.get_full_name()
 
     def get_qualification(self, obj) -> Optional[str]:
         return getattr(obj.application, 'qualification', None) if obj.application else None
@@ -443,10 +440,10 @@ class CatalogSerializer(serializers.ModelSerializer):
         return getattr(obj.application, 'catalog_description_ru', None) if obj.application else None
 
     def get_session_price(self, obj) -> Optional[float]:
-        if obj.application:
-            session_data = obj.application.service_sessions
-            if session_data:
-                return session_data[0].get("price")  # Должен вернуть цену первой сессии
+        if obj.application and isinstance(obj.application.service_sessions, list):
+            for session in obj.application.service_sessions:
+                if isinstance(session, dict) and 'price' in session:
+                    return session['price']  # Возвращаем цену первого сеанса
         return None
 
     def get_average_rating(self, obj) -> Optional[float]:
