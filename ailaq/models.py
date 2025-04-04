@@ -482,14 +482,20 @@ class PsychologistProfile(models.Model):
             self.is_in_catalog = (
                     self.is_verified and
                     self.application.purchased_applications >= 3 and
-                    Review.objects.filter(psychologist=self, session_request__status='COMPLETED',
-                                          rating__gt=0).count() >= 3
+                    Review.objects.filter(
+                        psychologist_name=self.get_full_name(),
+                        session_request__status='COMPLETED',
+                        rating__gt=0
+                    ).count() >= 3
             )
             self.save(update_fields=["is_in_catalog"])
 
     def get_reviews_count(self) -> int:
         """Возвращает количество завершённых отзывов"""
-        return Review.objects.filter(psychologist=self, session_request__status='COMPLETED').count()
+        return Review.objects.filter(
+            psychologist_name=self.get_full_name(),
+            session_request__status='COMPLETED'
+        ).count()
 
     def update_requests_count(self):
         from ailaq.models import PsychologistSessionRequest, QuickClientConsultationRequest
