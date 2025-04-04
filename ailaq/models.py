@@ -493,7 +493,7 @@ class PsychologistProfile(models.Model):
     def get_reviews_count(self) -> int:
         """Возвращает количество завершённых отзывов"""
         return Review.objects.filter(
-            psychologist_name=self.get_full_name(),
+            psychologist_name=self.get_full_name,
             session_request__status='COMPLETED'
         ).count()
 
