@@ -461,7 +461,7 @@ class PsychologistProfile(models.Model):
         full_name = self.get_full_name
         average_rating = Review.objects.filter(
             psychologist_name=full_name,
-            session__status='COMPLETED'
+            session_request__status='COMPLETED'
         ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0.0
 
         return round(average_rating, 1)
