@@ -432,22 +432,26 @@ class PsychologistProfile(models.Model):
 
     @staticmethod
     def process_psychologist_application(application_id: int) -> None:
-        """Обрабатывает заявку психолога"""
+        """Обрабатывает заявку психолога и создает профиль"""
         try:
             application = PsychologistApplication.objects.get(id=application_id)
             user = application.user
 
             if application.status == 'APPROVED':
-                user.is_psychologist = True  #  Статус "психолог"
+                user.is_psychologist = True  # Статус "психолог"
                 user.save()
 
-                #  Создаём профиль, если его нет
+                # Создаем профиль, если его нет
                 profile, created = PsychologistProfile.objects.get_or_create(user=user, application=application)
 
+                # Переносим фото из заявки в профиль
+                if application.profile_picture:
+                    profile.profile_picture = application.profile_picture
                 profile.is_verified = True
-                profile.update_catalog_visibility()  #  Проверяем, может ли он быть в каталоге
+                profile.update_catalog_visibility()  # Проверяем, может ли психолог быть в каталоге
                 profile.save()
 
+                # Отправляем email уведомление
                 from ailaq.emails import send_approval_email
                 send_approval_email(application)
 
