@@ -58,6 +58,8 @@ bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def post(self, request):
@@ -79,7 +81,6 @@ class TelegramAuthView(APIView):
 
         telegram_id = int(auth_data['id'])
         username = auth_data.get('username', f"tg_{telegram_id}")
-
         wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
         user = User.objects.filter(telegram_id=telegram_id).first()
@@ -117,10 +118,14 @@ class TelegramAuthView(APIView):
                 wants_to_be_psychologist=wants_to_be_psychologist,
             )
 
-        # Создание профилей
+        # 👇 Безопасное создание профилей
         if user.wants_to_be_psychologist:
-            PsychologistApplication.objects.get_or_create(user=user)
-            PsychologistProfile.objects.get_or_create(user=user, application=user.psychologistapplication)
+            application, _ = PsychologistApplication.objects.get_or_create(user=user)
+
+            # ✅ Проверка по user, а не по user+application (чтобы избежать IntegrityError)
+            if not PsychologistProfile.objects.filter(user=user).exists():
+                PsychologistProfile.objects.create(user=user, application=application)
+
         else:
             ClientProfile.objects.get_or_create(user=user)
 
