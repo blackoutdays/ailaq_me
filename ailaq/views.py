@@ -1242,7 +1242,7 @@ class UploadProfilePhotoView(APIView):
 
 class PsychologistApplicationViewSet(viewsets.ModelViewSet):
     queryset = PsychologistApplication.objects.all()
-    serializer_class = UpdatePsychologistApplicationStatusSerializer
+    serializer_class = PsychologistApplicationSerializer
     permission_classes = [IsAdminUser]  # Доступ только для администратора
 
     @extend_schema(
@@ -1292,32 +1292,29 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
             logger.error(f"Ошибка при обновлении статуса заявки психолога: {str(e)}")
             return Response({"detail": "Произошла ошибка при обновлении статуса."}, status=500)
 
-
-class AdminApprovePsychologistView(APIView):
-    permission_classes = [IsAdminUser]  # Только для администраторов
-
-    def post(self, request, psychologist_id, status):
+    @extend_schema(
+        tags=["Psychologist Applications"],
+        description="Получить полную информацию о заявке психолога.",
+        responses={
+            200: PsychologistApplicationSerializer,
+            404: OpenApiResponse(
+                description="Заявка не найдена."
+            ),
+        },
+    )
+    @action(detail=True, methods=['get'], url_path='get-details')
+    def get_details(self, request, pk=None):
+        """Получить полную информацию о заявке психолога."""
         try:
-            # Получаем заявку на психолога по id
-            application = PsychologistApplication.objects.get(user_id=psychologist_id)
+            # Получаем заявку по pk
+            application = self.get_object()
+
+            # Возвращаем полную информацию о заявке
+            serializer = self.get_serializer(application)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
         except PsychologistApplication.DoesNotExist:
-            return Response({"detail": "Заявка психолога не найдена."}, status=404)
-
-        # Проверяем, что статус правильный
-        if status not in ["APPROVED", "REJECTED"]:
-            return Response({"detail": "Неверный статус."}, status=400)
-
-        # Обновляем статус заявки
-        application.status = status
-        application.save()
-
-        # Если статус "APPROVED", создаем профиль для психолога
-        if status == "APPROVED":
-            PsychologistProfile.objects.get_or_create(user=application.user, application=application)
-
-        # Возвращаем успешный ответ
-        return Response({"detail": f"Статус заявки обновлен на {status}."}, status=200)
-
+            return Response({"detail": "Заявка не найдена."}, status=status.HTTP_404_NOT_FOUND)
 
 class AdminApprovePsychologistView(APIView):
     permission_classes = [IsAdminUser]  # Только для администраторов

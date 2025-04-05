@@ -39,9 +39,11 @@ urlpatterns = [
 
     # Админка
    path('api/admin/approve-psychologist/<int:psychologist_id>/<str:status>/',
-       AdminApprovePsychologistView.as_view(), name='admin_approve_psychologist'),
+   AdminApprovePsychologistView.as_view(), name='admin_approve_psychologist'),
+   path('api/psychologist-applications/<int:pk>/get-details/',
+   PsychologistApplicationViewSet.as_view({'get': 'get_details'}), name='get-psychologist-application-details'),
 
-    path('admin/', admin.site.urls),
+   path('admin/', admin.site.urls),
 
     # Авторизация и токены
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
