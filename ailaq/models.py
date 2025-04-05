@@ -323,12 +323,12 @@ class PsychologistApplication(models.Model):
             self.user.is_psychologist = True  # Устанавливаем роль психолога
             self.user.save()
 
-            # Создаем профиль психолога
+            # Обновляем профиль психолога
             profile, created = PsychologistProfile.objects.get_or_create(user=self.user, application=self)
-            profile.is_verified = True
+            profile.is_verified = True  # Подтверждаем профиль
             profile.save()
 
-            # Optionally, you can also send an email notification to the psychologist
+            # Отправляем email уведомление
             from ailaq.emails import send_approval_email
             send_approval_email(self)
 

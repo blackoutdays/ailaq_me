@@ -98,29 +98,32 @@ class TelegramAuthView(APIView):
                         consultation.save()
 
         if not user:
+            # Получаем значение wants_to_be_psychologist из запроса
             wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
+            # Создание нового пользователя
             user = CustomUser.objects.create(
                 username=f"tg_{telegram_id}",
                 telegram_id=telegram_id,
-                is_active=True
+                is_active=True  # Активируем пользователя сразу
             )
 
-            # Проверка на желание стать психологом
             if wants_to_be_psychologist:
-                # Создаем заявку психолога
+                # Создаем заявку психолога с начальным статусом "PENDING"
                 psychologist_application = PsychologistApplication.objects.create(user=user, status="PENDING")
 
-                user.wants_to_be_psychologist = True
-
-                user.save()  # Обязательно сохраняем пользователя с ролью психолога
-
-                # Создаем профиль психолога
+                # Создаем профиль психолога с привязкой к заявке
                 PsychologistProfile.objects.create(user=user, application=psychologist_application)
+
+                # Устанавливаем wants_to_be_psychologist = True
+                user.wants_to_be_psychologist = True
+                user.is_psychologist = False  # Роль психолога еще не присваиваем, до утверждения заявки
+                user.save()  # Сохраняем пользователя с ролью психолога в ожидании
+
             else:
                 # Создаем профиль клиента
                 ClientProfile.objects.create(user=user)
-                user.is_psychologist = False
+                user.is_psychologist = False  # Профиль клиента, роль психолога не присваивается
 
             # Не забываем сохранить изменения
             user.save()
