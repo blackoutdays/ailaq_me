@@ -55,10 +55,6 @@ logger = logging.getLogger("telegram_auth")
 User = get_user_model()
 bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
-class TelegramAuthPageView(View):
-    def get(self, request):
-        return render(request, 'telegram_auth.html', {})
-
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def post(self, request):
