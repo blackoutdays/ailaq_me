@@ -1,5 +1,6 @@
 import hmac
 import uuid
+from drf_spectacular import openapi
 from hashlib import sha256
 from rest_framework import generics
 from rest_framework.decorators import action
@@ -1241,7 +1242,6 @@ class UploadProfilePhotoView(APIView):
 
 
 
-
 class PsychologistApplicationViewSet(viewsets.ModelViewSet):
     queryset = PsychologistApplication.objects.all()
     serializer_class = UpdatePsychologistApplicationStatusSerializer
@@ -1256,11 +1256,21 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
         responses={
             200: OpenApiResponse(
                 description="Статус заявки успешно обновлен.",
-                content={"application/json": {"type": "object", "properties": {"detail": {"type": "string"}}}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                ),
             ),
             400: OpenApiResponse(
                 description="Неверный статус.",
-                content={"application/json": {"type": "object", "properties": {"detail": {"type": "string"}}}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'detail': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                ),
             ),
         },
     )
