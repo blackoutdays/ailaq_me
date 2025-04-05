@@ -22,8 +22,7 @@ from django.utils.timezone import now
 from django.shortcuts import get_object_or_404, render
 from rest_framework import status, viewsets
 from ailaq.tasks import send_email_async, notify_all_psychologists_task
-from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
@@ -1241,107 +1240,26 @@ class UploadProfilePhotoView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-#admin
-class IsAdminUser(BasePermission):
-    def has_permission(self, request, view):
-        return request.user and request.user.is_staff
 
 
-class AdminApprovePsychologistView(GenericAPIView):
-    queryset = PsychologistApplication.objects.all()
-    serializer_class = PsychologistApplicationSerializer
-    permission_classes = [IsAdminUser]
-
-    @extend_schema(
-        tags=["Админ"],
-        responses={
-            200: PsychologistApplicationSerializer(many=True),
-        },
-    )
-    def get(self, request):
-        applications = PsychologistApplication.objects.all()
-        serializer = PsychologistApplicationSerializer(applications, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("application_id", description="Application ID", required=True, type=int),
-        ],
-        responses={
-            200: OpenApiResponse(description="Psychologist approved successfully."),
-            400: OpenApiResponse(description="Invalid action."),
-            404: OpenApiResponse(description="Application not found."),
-        },
-    )
-    def post(self, request, application_id):
-        try:
-            application = PsychologistApplication.objects.get(id=application_id)
-
-            if application.status != "PENDING":
-                return Response(
-                    {"error": "Application has already been reviewed."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            action = request.data.get("action")
-
-            if action == "APPROVE":
-                application.status = "APPROVED"
-                application.save()
-
-                user = application.user
-                user.is_psychologist = True
-                user.save()
-
-                profile, _ = PsychologistProfile.objects.get_or_create(user=user, application=application)
-                profile.is_verified = True
-                profile.update_catalog_visibility()  # важно обновить статус для отображения в каталоге
-
-                send_approval_email(application)  # отправляем уведомление об одобрении
-
-                return Response(
-                    {"message": "Psychologist approved successfully."},
-                    status=status.HTTP_200_OK,
-                )
-
-            elif action == "REJECT":
-                application.status = "REJECTED"
-                application.save()
-
-                send_rejection_email(application)  # уведомление о отклонении
-
-                return Response(
-                    {"message": "Psychologist application rejected."},
-                    status=status.HTTP_200_OK,
-                )
-            else:
-                return Response(
-                    {"error": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST
-                )
-
-        except PsychologistApplication.DoesNotExist:
-            return Response(
-                {"error": "Application not found."}, status=status.HTTP_404_NOT_FOUND
-            )
-
-class PsychologistApplicationViewSet(ModelViewSet):
+class PsychologistApplicationViewSet(viewsets.ModelViewSet):
     queryset = PsychologistApplication.objects.all()
     serializer_class = UpdatePsychologistApplicationStatusSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminUser]  # Доступ только для администратора
 
     @extend_schema(
         tags=["Psychologist Applications"],
-        description="Changes the status of a psychologist application to either 'APPROVED' or 'REJECTED'.",
+        description="Изменяет статус заявки психолога на 'APPROVED' или 'REJECTED'.",
         parameters=[
-            OpenApiParameter("status", type=str, description="New status for the application (APPROVED/REJECTED)", required=True)
+            OpenApiParameter("status", type=str, description="Новый статус заявки (APPROVED/REJECTED)", required=True)
         ],
         responses={
             200: OpenApiResponse(
-                description="Successfully updated the application status",
+                description="Статус заявки успешно обновлен.",
                 content={"application/json": {"type": "object", "properties": {"detail": {"type": "string"}}}},
             ),
             400: OpenApiResponse(
-                description="Invalid status provided",
+                description="Неверный статус.",
                 content={"application/json": {"type": "object", "properties": {"detail": {"type": "string"}}}},
             ),
         },
@@ -1349,21 +1267,56 @@ class PsychologistApplicationViewSet(ModelViewSet):
     @action(detail=True, methods=['post'], url_path='update-status')
     def update_status(self, request, pk=None):
         """Изменить статус заявки психолога."""
-        application = self.get_object()
+        try:
+            # Получаем объект заявки
+            application = self.get_object()
 
-        # Получаем новый статус из тела запроса
-        status = request.data.get('status')
+            # Получаем новый статус из тела запроса
+            status = request.data.get('status')
 
-        # Проверка на корректность статуса
-        if status not in ['APPROVED', 'REJECTED']:
-            return Response({"detail": "Invalid status."}, status=status.HTTP_400_BAD_REQUEST)
+            # Проверка на корректность статуса
+            if status not in ['APPROVED', 'REJECTED']:
+                return Response({"detail": "Неверный статус."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Обновляем статус заявки
+            application.status = status
+            application.save()
+
+            # Если статус "APPROVED", создаем профиль для психолога
+            if status == 'APPROVED':
+                PsychologistProfile.objects.get_or_create(user=application.user, application=application)
+
+            # Логируем успешное обновление статуса
+            logger.info(f"Статус заявки психолога обновлен на {status} для пользователя {application.user.id}")
+
+            return Response({"detail": f"Статус заявки обновлен на {status}."}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            # Логируем ошибку, если что-то пошло не так
+            logger.error(f"Ошибка при обновлении статуса заявки психолога: {str(e)}")
+            return Response({"detail": "Произошла ошибка при обновлении статуса."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class AdminApprovePsychologistView(APIView):
+    permission_classes = [IsAdminUser]  # Только для администраторов
+
+    def post(self, request, psychologist_id, status):
+        try:
+            # Получаем заявку на психолога по id
+            application = PsychologistApplication.objects.get(user_id=psychologist_id)
+        except PsychologistApplication.DoesNotExist:
+            return Response({"detail": "Заявка психолога не найдена."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Проверяем, что статус правильный
+        if status not in ["APPROVED", "REJECTED"]:
+            return Response({"detail": "Неверный статус."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Обновляем статус заявки
         application.status = status
         application.save()
 
-        # Если статус "APPROVED", создаём профиль для психолога
-        if status == 'APPROVED':
+        # Если статус "APPROVED", создаем профиль для психолога
+        if status == "APPROVED":
             PsychologistProfile.objects.get_or_create(user=application.user, application=application)
 
-        return Response({"detail": f"Application status updated to {status}."}, status=status.HTTP_200_OK)
+        # Возвращаем успешный ответ
+        return Response({"detail": f"Статус заявки обновлен на {status}."}, status=status.HTTP_200_OK)

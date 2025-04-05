@@ -6,7 +6,7 @@ from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from ailaq.views import (
-    AdminApprovePsychologistView, PsychologistProfileView,
+     PsychologistProfileView, AdminApprovePsychologistView,
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
     ReviewListView, TelegramAuthView, CatalogViewSet, ServicePriceView,
     PublicPsychologistProfileView,PsychologistApplicationViewSet,
@@ -38,8 +38,9 @@ urlpatterns = [
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
 
     # Админка
-    path('api/admin/approve-psychologist/<int:psychologist_id>/<str:status>/',
+   path('api/admin/approve-psychologist/<int:psychologist_id>/<str:status>/',
        AdminApprovePsychologistView.as_view(), name='admin_approve_psychologist'),
+
     path('admin/', admin.site.urls),
 
     # Авторизация и токены
