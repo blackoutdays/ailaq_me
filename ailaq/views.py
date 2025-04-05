@@ -79,7 +79,6 @@ class TelegramAuthView(APIView):
 
         telegram_id = int(auth_data['id'])
         username = auth_data.get('username', f"tg_{telegram_id}")
-        first_name = auth_data.get('first_name', '')
 
         wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
@@ -114,7 +113,6 @@ class TelegramAuthView(APIView):
             user = User.objects.create(
                 username=username,
                 telegram_id=telegram_id,
-                first_name=first_name,
                 is_active=True,
                 wants_to_be_psychologist=wants_to_be_psychologist,
             )
