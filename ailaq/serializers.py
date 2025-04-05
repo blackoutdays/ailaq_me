@@ -372,31 +372,137 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
             return obj.profile_picture.url
         return None
 
+
+class EducationDocumentSerializer(serializers.ModelSerializer):
+    document = serializers.FileField(required=True)
+    year = serializers.IntegerField(required=False, allow_null=True)
+    title = serializers.CharField(required=False, allow_blank=True)
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = EducationDocument
+        fields = ['document', 'year', 'title', 'file_signature']
+
+
+class ServicePriceSerializer(serializers.ModelSerializer):
+    service_sessions = SessionItemSerializer(many=True)
+
+    class Meta:
+        model = PsychologistApplication
+        fields = ['service_sessions']
+
+    def update(self, instance, validated_data):
+        new_sessions = validated_data.get('service_sessions', [])
+
+        existing_sessions = instance.service_sessions if isinstance(instance.service_sessions, list) else []
+        existing_sessions_dict = {str(s.get("id")): s for s in existing_sessions if "id" in s}
+
+        updated_sessions = []
+
+        for session in new_sessions:
+            session_id = str(session.get("id") or uuid.uuid4())  # 👈 UUID если нет
+            session["id"] = session_id
+            session["price"] = float(session["price"])
+
+            if session_id in existing_sessions_dict:
+                existing_sessions_dict[session_id].update(session)
+                updated_sessions.append(existing_sessions_dict[session_id])
+            else:
+                updated_sessions.append(session)
+
+        instance.service_sessions = updated_sessions
+        instance.save(update_fields=["service_sessions"])
+        return instance
+
+    def to_representation(self, instance):
+        sessions = instance.service_sessions if isinstance(instance.service_sessions, list) else []
+        return {
+            "service_sessions": SessionItemSerializer(sessions, many=True).data
+        }
+
+# загрузка доков
+class DocumentSerializer(serializers.ModelSerializer):
+    office_photo = serializers.ImageField(required=False, allow_null=True)
+    education_files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        allow_empty=True
+    )
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = PsychologistApplication
+        fields = ['office_photo', 'education_files', 'file_signature']
+
+# 1. faq вопрос/ы и ответ/ы
+class FAQSerializer(serializers.Serializer):
+    question = serializers.CharField(max_length=255)
+    answer = serializers.CharField(max_length=1000)
+
+# 2. faq вопрос/ы и ответ/ы
+class FAQListSerializer(serializers.Serializer):
+    faqs = serializers.ListField(
+        child=FAQSerializer(),
+        required=False
+    )
+
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
+    # Ссылаемся на профиль пользователя для вывода полной информации
     user = serializers.ReadOnlyField(source="user.email")
-    profile_picture_url = serializers.SerializerMethodField()
+    first_name_ru = serializers.CharField()
+    last_name_ru = serializers.CharField()
+    middle_name_ru = serializers.CharField()
+    birth_date = serializers.DateField()
+    gender = serializers.CharField()
+    communication_language = serializers.CharField()
+    service_countries = serializers.ListField(child=serializers.CharField())
+    service_cities = serializers.ListField(child=serializers.CharField())
+    telegram_id = serializers.CharField()
+    about_me_ru = serializers.CharField()
+    catalog_description_ru = serializers.CharField()
+    qualification = serializers.CharField()
+    works_with = serializers.CharField()
+    problems_worked_with = serializers.CharField()
+    work_methods = serializers.CharField()
+    experience_years = serializers.IntegerField()
+    academic_degree = serializers.CharField()
+    additional_specialization = serializers.CharField()
+    additional_psychologist_directions = serializers.CharField()
+    education = serializers.ListField(child=serializers.CharField())
+    education_files = EducationDocumentSerializer(many=True)
+    country = serializers.CharField()
+    city = serializers.CharField()
+    office_address = serializers.CharField()
+    office_photo_url = serializers.SerializerMethodField()
+    service_sessions = serializers.ListField(child=serializers.DictField())
+    is_verified = serializers.BooleanField()
+    is_in_catalog = serializers.BooleanField()
+    rating_system = serializers.FloatField()
+    internal_rating = serializers.FloatField()
+    status = serializers.CharField()
+    profile_picture_url = serializers.SerializerMethodField()  # добавляем поле для фото профиля
 
     class Meta:
         model = PsychologistApplication
         fields = [
-         'user', 'first_name_ru', 'last_name_ru', 'gender', 'qualification', 'is_verified', 'is_in_catalog', 'status', 'profile_picture_url'
+            'user', 'first_name_ru', 'last_name_ru', 'middle_name_ru', 'birth_date', 'gender', 'communication_language',
+            'service_countries', 'service_cities', 'telegram_id', 'about_me_ru', 'catalog_description_ru',
+            'qualification', 'works_with', 'problems_worked_with', 'work_methods', 'experience_years',
+            'academic_degree', 'additional_specialization', 'additional_psychologist_directions', 'education',
+            'education_files', 'country', 'city', 'office_address', 'office_photo_url', 'service_sessions',
+            'is_verified', 'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'profile_picture_url'
         ]
-        read_only_fields = ['user', 'status']
-
-    def create(self, validated_data):
-        user = self.context['request'].user
-        return PsychologistApplication.objects.create(user=user, **validated_data)
-
-    def update(self, instance, validated_data):
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance
 
     def get_profile_picture_url(self, obj):
-        """Получает URL фото профиля психолога, если оно существует"""
+        """Возвращает URL фотографии профиля психолога"""
         if obj.profile_picture:
             return obj.profile_picture.url
+        return None
+
+    def get_office_photo_url(self, obj):
+        """Возвращает URL фото офиса, если оно существует"""
+        if obj.office_photo:
+            return obj.office_photo.url
         return None
 
 class TopicSerializer(serializers.ModelSerializer):
@@ -470,16 +576,6 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
 
         return super().update(instance, validated_data)
 
-class EducationDocumentSerializer(serializers.ModelSerializer):
-    document = serializers.FileField(required=True)
-    year = serializers.IntegerField(required=False, allow_null=True)
-    title = serializers.CharField(required=False, allow_blank=True)
-    file_signature = serializers.CharField(required=False, allow_blank=True)
-
-    class Meta:
-        model = EducationDocument
-        fields = ['document', 'year', 'title', 'file_signature']
-
 # Квалификация психолога
 class QualificationSerializer(serializers.ModelSerializer):
     office_photo = serializers.ImageField(required=False, allow_null=True)
@@ -511,67 +607,6 @@ class SessionItemSerializer(serializers.Serializer):
         result["location"] = f"{result.get('country', '')}, {result.get('city', '')}".strip(", ")
         return result
 
-class ServicePriceSerializer(serializers.ModelSerializer):
-    service_sessions = SessionItemSerializer(many=True)
-
-    class Meta:
-        model = PsychologistApplication
-        fields = ['service_sessions']
-
-    def update(self, instance, validated_data):
-        new_sessions = validated_data.get('service_sessions', [])
-
-        existing_sessions = instance.service_sessions if isinstance(instance.service_sessions, list) else []
-        existing_sessions_dict = {str(s.get("id")): s for s in existing_sessions if "id" in s}
-
-        updated_sessions = []
-
-        for session in new_sessions:
-            session_id = str(session.get("id") or uuid.uuid4())  # 👈 UUID если нет
-            session["id"] = session_id
-            session["price"] = float(session["price"])
-
-            if session_id in existing_sessions_dict:
-                existing_sessions_dict[session_id].update(session)
-                updated_sessions.append(existing_sessions_dict[session_id])
-            else:
-                updated_sessions.append(session)
-
-        instance.service_sessions = updated_sessions
-        instance.save(update_fields=["service_sessions"])
-        return instance
-
-    def to_representation(self, instance):
-        sessions = instance.service_sessions if isinstance(instance.service_sessions, list) else []
-        return {
-            "service_sessions": SessionItemSerializer(sessions, many=True).data
-        }
-
-# загрузка доков
-class DocumentSerializer(serializers.ModelSerializer):
-    office_photo = serializers.ImageField(required=False, allow_null=True)
-    education_files = serializers.ListField(
-        child=serializers.FileField(),
-        required=False,
-        allow_empty=True
-    )
-    file_signature = serializers.CharField(required=False, allow_blank=True)
-
-    class Meta:
-        model = PsychologistApplication
-        fields = ['office_photo', 'education_files', 'file_signature']
-
-# 1. faq вопрос/ы и ответ/ы
-class FAQSerializer(serializers.Serializer):
-    question = serializers.CharField(max_length=255)
-    answer = serializers.CharField(max_length=1000)
-
-# 2. faq вопрос/ы и ответ/ы
-class FAQListSerializer(serializers.Serializer):
-    faqs = serializers.ListField(
-        child=FAQSerializer(),
-        required=False
-    )
 
 class TelegramAuthSerializer(serializers.Serializer):
     id = serializers.IntegerField()
