@@ -106,20 +106,27 @@ class TelegramAuthView(APIView):
                 is_active=True
             )
 
+            # Проверка на желание стать психологом
             if wants_to_be_psychologist:
-                # Создаем заявку и профиль психолога
+                # Создаем заявку психолога
                 psychologist_application = PsychologistApplication.objects.create(user=user, status="PENDING")
-                user.is_psychologist = True  # Устанавливаем роль психолога
-                user.save()
+
+                user.wants_to_be_psychologist = True
+
+                user.save()  # Обязательно сохраняем пользователя с ролью психолога
+
+                # Создаем профиль психолога
                 PsychologistProfile.objects.create(user=user, application=psychologist_application)
             else:
+                # Создаем профиль клиента
                 ClientProfile.objects.create(user=user)
                 user.is_psychologist = False
 
+            # Не забываем сохранить изменения
             user.save()
 
+        # Создание токенов и отправка сообщения
         refresh = RefreshToken.for_user(user)
-
         from asgiref.sync import async_to_sync
         try:
             async_to_sync(send_telegram_message)(
@@ -133,9 +140,10 @@ class TelegramAuthView(APIView):
             'access_token': str(refresh.access_token),
             'refresh_token': str(refresh),
             'user_id': user.id,
-            'role': user.role,
+            'role': user.role,  # Передаем роль, она будет определена через свойство `role`
             'message': "Telegram успешно привязан",
         })
+
 
 class QuickClientConsultationAPIView(APIView):
     permission_classes = [IsAuthenticated]
