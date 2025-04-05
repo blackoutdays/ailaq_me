@@ -38,10 +38,7 @@ class CustomUserManager(BaseUserManager):
 
         # Если пользователь выбрал стать психологом, создаем заявку и профиль
         if wants_to_be_psychologist:
-            # Создаем заявку на психолога с статусом PENDING
             psychologist_application = PsychologistApplication.objects.create(user=user, status="PENDING")
-
-            # Создаем профиль психолога, но не меняем is_psychologist на True
             PsychologistProfile.objects.create(user=user, application=psychologist_application)
 
         # Если регистрация через email — отправляем письмо подтверждения

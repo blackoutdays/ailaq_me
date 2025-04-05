@@ -69,25 +69,27 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"password_confirm": "Пароли не совпадают."})
         return attrs
 
-    def create(self, validated_data):
-        """ Создаёт нового пользователя """
-        validated_data.pop('password_confirm')  # убираем повтор пароля
-        wants_to_be_psychologist = validated_data.pop("wants_to_be_psychologist")
+def create(self, validated_data):
+    """ Создаёт нового пользователя """
+    validated_data.pop('password_confirm')  # убираем повтор пароля
+    wants_to_be_psychologist = validated_data.pop("wants_to_be_psychologist")
 
-        user = CustomUser.objects.create(
-            email=validated_data['email'],
-            wants_to_be_psychologist=wants_to_be_psychologist,
-            is_active=False  # Email должен быть подтверждён
-        )
-        user.set_password(validated_data['password'])
-        user.verification_code = get_random_string(length=32)
-        user.verification_code_expiration = now() + timedelta(hours=24)
-        user.save()
+    user = CustomUser.objects.create(
+        email=validated_data['email'],
+        wants_to_be_psychologist=wants_to_be_psychologist,
+        is_active=False  # Email должен быть подтверждён
+    )
+    user.set_password(validated_data['password'])
+    user.verification_code = get_random_string(length=32)
+    user.verification_code_expiration = now() + timedelta(hours=24)
+    user.save()
 
-        if wants_to_be_psychologist:
-            PsychologistApplication.objects.get_or_create(user=user)
+    # Если пользователь хочет стать психологом, создаем заявку и профиль
+    if wants_to_be_psychologist:
+        PsychologistApplication.objects.get_or_create(user=user)
+        # Профиль создастся автоматически в процессе создания заявки
 
-        return user
+    return user
 
 class LoginSerializer(serializers.Serializer):
     """
