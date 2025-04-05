@@ -320,15 +320,15 @@ class PsychologistApplication(models.Model):
 
         # Когда статус заявки "APPROVED", создается профиль психолога и присваивается роль
         if old_status == "PENDING" and self.status == "APPROVED":
-            self.user.is_psychologist = True  # Устанавливаем роль психолога
+            self.user.wants_to_be_psychologist = True  # Пользователь теперь психолог
             self.user.save()
 
-            # Обновляем профиль психолога
+            # Создаем профиль психолога
             profile, created = PsychologistProfile.objects.get_or_create(user=self.user, application=self)
-            profile.is_verified = True  # Подтверждаем профиль
+            profile.is_verified = True
             profile.save()
 
-            # Отправляем email уведомление
+            # Отправляем уведомление по email или через систему
             from ailaq.emails import send_approval_email
             send_approval_email(self)
 
