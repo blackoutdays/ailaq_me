@@ -1,11 +1,8 @@
 import hmac
 import uuid
 from hashlib import sha256
-
-from django.contrib.auth import get_user_model
 from rest_framework import generics
 from rest_framework.decorators import action
-
 from .serializers import UserIdSerializer, UpdatePsychologistApplicationStatusSerializer
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
@@ -26,7 +23,7 @@ from django.shortcuts import get_object_or_404, render
 from rest_framework import status, viewsets
 from ailaq.tasks import send_email_async, notify_all_psychologists_task
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
@@ -963,82 +960,6 @@ class ReviewCreateView(APIView):
 
         return Response(ReviewSerializer(review).data, status=201)
 
-class AdminApprovePsychologistView(GenericAPIView):
-    queryset = PsychologistApplication.objects.all()
-    serializer_class = PsychologistApplicationSerializer
-    permission_classes = [IsAdminUser]
-
-    @extend_schema(
-        tags=["Админ"],
-        responses={
-            200: PsychologistApplicationSerializer(many=True),
-        },
-    )
-    def get(self, request):
-        applications = PsychologistApplication.objects.all()
-        serializer = PsychologistApplicationSerializer(applications, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("application_id", description="Application ID", required=True, type=int),
-        ],
-        responses={
-            200: OpenApiResponse(description="Psychologist approved successfully."),
-            400: OpenApiResponse(description="Invalid action."),
-            404: OpenApiResponse(description="Application not found."),
-        },
-    )
-    def post(self, request, application_id):
-        try:
-            application = PsychologistApplication.objects.get(id=application_id)
-
-            if application.status != "PENDING":
-                return Response(
-                    {"error": "Application has already been reviewed."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            action = request.data.get("action")
-
-            if action == "APPROVE":
-                application.status = "APPROVED"
-                application.save()
-
-                user = application.user
-                user.is_psychologist = True
-                user.save()
-
-                profile, _ = PsychologistProfile.objects.get_or_create(user=user, application=application)
-                profile.is_verified = True
-                profile.update_catalog_visibility()  # важно обновить статус для отображения в каталоге
-
-                send_approval_email(application)  # отправляем уведомление об одобрении
-
-                return Response(
-                    {"message": "Psychologist approved successfully."},
-                    status=status.HTTP_200_OK,
-                )
-
-            elif action == "REJECT":
-                application.status = "REJECTED"
-                application.save()
-
-                send_rejection_email(application)  # уведомление о отклонении
-
-                return Response(
-                    {"message": "Psychologist application rejected."},
-                    status=status.HTTP_200_OK,
-                )
-            else:
-                return Response(
-                    {"error": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST
-                )
-
-        except PsychologistApplication.DoesNotExist:
-            return Response(
-                {"error": "Application not found."}, status=status.HTTP_404_NOT_FOUND
-            )
 
 class TopicListView(APIView):
     def get(self, request):
@@ -1321,6 +1242,88 @@ class UploadProfilePhotoView(APIView):
 
 
 #admin
+class IsAdminUser(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_staff
+
+
+class AdminApprovePsychologistView(GenericAPIView):
+    queryset = PsychologistApplication.objects.all()
+    serializer_class = PsychologistApplicationSerializer
+    permission_classes = [IsAdminUser]
+
+    @extend_schema(
+        tags=["Админ"],
+        responses={
+            200: PsychologistApplicationSerializer(many=True),
+        },
+    )
+    def get(self, request):
+        applications = PsychologistApplication.objects.all()
+        serializer = PsychologistApplicationSerializer(applications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("application_id", description="Application ID", required=True, type=int),
+        ],
+        responses={
+            200: OpenApiResponse(description="Psychologist approved successfully."),
+            400: OpenApiResponse(description="Invalid action."),
+            404: OpenApiResponse(description="Application not found."),
+        },
+    )
+    def post(self, request, application_id):
+        try:
+            application = PsychologistApplication.objects.get(id=application_id)
+
+            if application.status != "PENDING":
+                return Response(
+                    {"error": "Application has already been reviewed."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            action = request.data.get("action")
+
+            if action == "APPROVE":
+                application.status = "APPROVED"
+                application.save()
+
+                user = application.user
+                user.is_psychologist = True
+                user.save()
+
+                profile, _ = PsychologistProfile.objects.get_or_create(user=user, application=application)
+                profile.is_verified = True
+                profile.update_catalog_visibility()  # важно обновить статус для отображения в каталоге
+
+                send_approval_email(application)  # отправляем уведомление об одобрении
+
+                return Response(
+                    {"message": "Psychologist approved successfully."},
+                    status=status.HTTP_200_OK,
+                )
+
+            elif action == "REJECT":
+                application.status = "REJECTED"
+                application.save()
+
+                send_rejection_email(application)  # уведомление о отклонении
+
+                return Response(
+                    {"message": "Psychologist application rejected."},
+                    status=status.HTTP_200_OK,
+                )
+            else:
+                return Response(
+                    {"error": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+        except PsychologistApplication.DoesNotExist:
+            return Response(
+                {"error": "Application not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
 class PsychologistApplicationViewSet(ModelViewSet):
     queryset = PsychologistApplication.objects.all()
     serializer_class = UpdatePsychologistApplicationStatusSerializer

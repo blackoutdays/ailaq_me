@@ -6,16 +6,17 @@ from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from ailaq.views import (
-    LoginView, RegisterUserView, AdminApprovePsychologistView, PsychologistProfileView,
+    AdminApprovePsychologistView, PsychologistProfileView,
     QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
     ReviewListView, TelegramAuthView, CatalogViewSet, ServicePriceView,
-    PublicPsychologistProfileView,
+    PublicPsychologistProfileView,PsychologistApplicationViewSet,
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
-    ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
     QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView,
-    TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView, PsychologistChangePasswordView,
+    TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView,
     AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView, UploadProfilePhotoView,
-    PsychologistApplicationViewSet
+    LoginView, RegisterUserView, ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
+    PsychologistChangePasswordView
+
 )
 from django.urls import path
 from ailaq.views import UserListView
@@ -98,6 +99,5 @@ urlpatterns = [
 
     ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-# Добавление обработки медиафайлов в режиме DEBUG
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
