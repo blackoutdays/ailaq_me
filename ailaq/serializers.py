@@ -383,19 +383,17 @@ class EducationDocumentSerializer(serializers.ModelSerializer):
         model = EducationDocument
         fields = ['document', 'year', 'title', 'file_signature']
 
-
 class SessionItemSerializer(serializers.Serializer):
     id = serializers.CharField(read_only=True)
-    session_type = serializers.CharField()  # 👈 заменить ChoiceField на CharField
-    online_offline = serializers.CharField()  # 👈 заменить ChoiceField на CharField
+    session_type = serializers.CharField()
+    online_offline = serializers.CharField()
     country = serializers.CharField(max_length=100)
     city = serializers.CharField(max_length=100)
     duration = serializers.IntegerField(min_value=1)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
-    currency = serializers.CharField()  # 👈 заменить ChoiceField на CharField
+    currency = serializers.CharField()
 
     def to_representation(self, instance):
-        # instance — это dict
         result = dict(instance)
         result["price"] = float(result.get("price", 0))
         result["location"] = f"{result.get('country', '')}, {result.get('city', '')}".strip(", ")
@@ -417,7 +415,7 @@ class ServicePriceSerializer(serializers.ModelSerializer):
         updated_sessions = []
 
         for session in new_sessions:
-            session_id = str(session.get("id") or uuid.uuid4())  # 👈 UUID если нет
+            session_id = str(session.get("id") or uuid.uuid4())
             session["id"] = session_id
             session["price"] = float(session["price"])
 
