@@ -58,7 +58,6 @@ bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
-
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def post(self, request):
@@ -79,57 +78,60 @@ class TelegramAuthView(APIView):
             return Response({"error": "Неверная подпись"}, status=400)
 
         telegram_id = int(auth_data['id'])
-        username = auth_data.get('username', f"user_{telegram_id}")
+        username = auth_data.get('username', f"tg_{telegram_id}")
         first_name = auth_data.get('first_name', '')
+
+        wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
         user = User.objects.filter(telegram_id=telegram_id).first()
 
         if not user:
+            # Привязка через client_token
             client_token = request.COOKIES.get('client_token')
             if client_token:
                 consultation = QuickClientConsultationRequest.objects.filter(client_token=client_token).first()
                 if consultation:
-                    email_from_request = consultation.email or f"{telegram_id}@telegram.local"
-                    user = User.objects.filter(email=email_from_request).first()
+                    user = User.objects.filter(email=consultation.email).first()
                     if user:
                         user.telegram_id = telegram_id
                         user.save()
                         consultation.telegram_id = telegram_id
                         consultation.save()
 
-        if not user:
-            # Получаем значение wants_to_be_psychologist из запроса
-            wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
+        if user:
+            updated = False
+            if user.username != username:
+                user.username = username
+                updated = True
+            if user.first_name != first_name:
+                user.first_name = first_name
+                updated = True
+            if not user.is_active:
+                user.is_active = True
+                updated = True
+            if updated:
+                user.save()
 
-            # Создание нового пользователя
-            user = CustomUser.objects.create(
-                username=f"tg_{telegram_id}",
+        else:
+            # Новый пользователь: только сейчас можно установить wants_to_be_psychologist
+            user = User.objects.create(
+                username=username,
                 telegram_id=telegram_id,
-                is_active=True  # Активируем пользователя сразу
+                first_name=first_name,
+                is_active=True,
+                wants_to_be_psychologist=wants_to_be_psychologist,
             )
 
-            if wants_to_be_psychologist:
-                # Создаем заявку психолога с начальным статусом "PENDING"
-                psychologist_application = PsychologistApplication.objects.create(user=user, status="PENDING")
+        # Создание профилей
+        if user.wants_to_be_psychologist:
+            PsychologistApplication.objects.get_or_create(user=user)
+            PsychologistProfile.objects.get_or_create(user=user, application=user.psychologistapplication)
+        else:
+            ClientProfile.objects.get_or_create(user=user)
 
-                # Создаем профиль психолога с привязкой к заявке
-                PsychologistProfile.objects.create(user=user, application=psychologist_application)
-
-                # Устанавливаем wants_to_be_psychologist = True
-                user.wants_to_be_psychologist = True
-                user.is_psychologist = False  # Роль психолога еще не присваиваем, до утверждения заявки
-                user.save()  # Сохраняем пользователя с ролью психолога в ожидании
-
-            else:
-                # Создаем профиль клиента
-                ClientProfile.objects.create(user=user)
-                user.is_psychologist = False  # Профиль клиента, роль психолога не присваивается
-
-            # Не забываем сохранить изменения
-            user.save()
-
-        # Создание токенов и отправка сообщения
+        # Токены
         refresh = RefreshToken.for_user(user)
+
         from asgiref.sync import async_to_sync
         try:
             async_to_sync(send_telegram_message)(
@@ -143,10 +145,9 @@ class TelegramAuthView(APIView):
             'access_token': str(refresh.access_token),
             'refresh_token': str(refresh),
             'user_id': user.id,
-            'role': user.role,  # Передаем роль, она будет определена через свойство `role`
+            'role': user.role,
             'message': "Telegram успешно привязан",
         })
-
 
 class QuickClientConsultationAPIView(APIView):
     permission_classes = [IsAuthenticated]
