@@ -17,6 +17,7 @@ from datetime import date
 
 from config import settings
 
+User = get_user_model()
 CustomUser = get_user_model()
 
 class CustomUserCreationSerializer(serializers.ModelSerializer):
@@ -53,9 +54,7 @@ class CustomUserCreationSerializer(serializers.ModelSerializer):
         return user
 
 class RegisterSerializer(serializers.ModelSerializer):
-    """
-    Сериализатор для регистрации пользователей (клиентов и психологов).
-    """
+    """Сериализатор для регистрации пользователей (клиентов и психологов)"""
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
     wants_to_be_psychologist = serializers.BooleanField(default=False)
@@ -615,17 +614,22 @@ class TelegramAuthSerializer(serializers.Serializer):
 
         return user
 
-# serializers.py
-from django.contrib.auth import get_user_model
-from rest_framework import serializers
-
-User = get_user_model()
-
 class UserIdSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'email', 'is_psychologist']
 
+#admin
+class UpdatePsychologistApplicationStatusSerializer(serializers.ModelSerializer):
+    status = serializers.ChoiceField(choices=PsychologistApplication.STATUS_CHOICES)
 
+    class Meta:
+        model = PsychologistApplication
+        fields = ['status']
+
+    def update(self, instance, validated_data):
+        instance.status = validated_data.get('status', instance.status)
+        instance.save()
+        return instance
 
 

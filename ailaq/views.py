@@ -4,7 +4,9 @@ from hashlib import sha256
 
 from django.contrib.auth import get_user_model
 from rest_framework import generics
-from .serializers import UserIdSerializer
+from rest_framework.decorators import action
+
+from .serializers import UserIdSerializer, UpdatePsychologistApplicationStatusSerializer
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -14,7 +16,7 @@ from rest_framework.exceptions import NotFound, ValidationError, PermissionDenie
 from rest_framework.serializers import Serializer, EmailField
 from django.utils.crypto import get_random_string
 from datetime import timedelta
-from . import models
+from . import models, permissions
 from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramAuthSerializer, \
     AuthenticatedQuickClientConsultationRequestSerializer, \
     QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
@@ -41,7 +43,7 @@ from .serializers import (
 )
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
-from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.viewsets import ReadOnlyModelViewSet, ModelViewSet
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser, FormParser
 import telegram
@@ -1316,3 +1318,49 @@ class UploadProfilePhotoView(APIView):
             "message": "Фото успешно загружено.",
             "profile_picture_url": profile.profile_picture.url
         }, status=status.HTTP_200_OK)
+
+
+#admin
+class PsychologistApplicationViewSet(ModelViewSet):
+    queryset = PsychologistApplication.objects.all()
+    serializer_class = UpdatePsychologistApplicationStatusSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    @extend_schema(
+        tags=["Psychologist Applications"],
+        description="Changes the status of a psychologist application to either 'APPROVED' or 'REJECTED'.",
+        parameters=[
+            OpenApiParameter("status", type=str, description="New status for the application (APPROVED/REJECTED)", required=True)
+        ],
+        responses={
+            200: OpenApiResponse(
+                description="Successfully updated the application status",
+                content={"application/json": {"type": "object", "properties": {"detail": {"type": "string"}}}},
+            ),
+            400: OpenApiResponse(
+                description="Invalid status provided",
+                content={"application/json": {"type": "object", "properties": {"detail": {"type": "string"}}}},
+            ),
+        },
+    )
+    @action(detail=True, methods=['post'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        """Изменить статус заявки психолога."""
+        application = self.get_object()
+
+        # Получаем новый статус из тела запроса
+        status = request.data.get('status')
+
+        # Проверка на корректность статуса
+        if status not in ['APPROVED', 'REJECTED']:
+            return Response({"detail": "Invalid status."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Обновляем статус заявки
+        application.status = status
+        application.save()
+
+        # Если статус "APPROVED", создаём профиль для психолога
+        if status == 'APPROVED':
+            PsychologistProfile.objects.get_or_create(user=application.user, application=application)
+
+        return Response({"detail": f"Application status updated to {status}."}, status=status.HTTP_200_OK)
