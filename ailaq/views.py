@@ -103,9 +103,6 @@ class TelegramAuthView(APIView):
             if user.username != username:
                 user.username = username
                 updated = True
-            if user.first_name != first_name:
-                user.first_name = first_name
-                updated = True
             if not user.is_active:
                 user.is_active = True
                 updated = True
