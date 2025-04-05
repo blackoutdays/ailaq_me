@@ -15,7 +15,7 @@ from ailaq.enums import (
 logger = logging.getLogger(__name__)
 
 class CustomUserManager(BaseUserManager):
-    def create_user(self, email=None, password=None, telegram_id=None, **extra_fields):
+    def create_user(self, email=None, password=None, telegram_id=None, wants_to_be_psychologist=False, **extra_fields):
         """Создаёт нового пользователя (email или Telegram)"""
         if not email and not telegram_id:
             raise ValueError('Необходимо указать email или Telegram ID')
@@ -36,7 +36,15 @@ class CustomUserManager(BaseUserManager):
             user.set_password(password)
         user.save(using=self._db)
 
-        #  Если регистрация через email — отправляем письмо подтверждения
+        # Если пользователь выбрал стать психологом, создаем заявку и профиль
+        if wants_to_be_psychologist:
+            # Создаем заявку на психолога с статусом PENDING
+            psychologist_application = PsychologistApplication.objects.create(user=user, status="PENDING")
+
+            # Создаем профиль психолога, но не меняем is_psychologist на True
+            PsychologistProfile.objects.create(user=user, application=psychologist_application)
+
+        # Если регистрация через email — отправляем письмо подтверждения
         if email:
             verification_code = get_random_string(length=32)
             user.verification_code = verification_code
@@ -307,10 +315,7 @@ class PsychologistApplication(models.Model):
     updated = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        """
-        При изменении статуса заявки на `APPROVED` создаём `PsychologistProfile`
-        """
-        # Получаем старый статус заявки до сохранения
+        # Get the old status before saving
         if self.pk:
             old_status = PsychologistApplication.objects.filter(pk=self.pk).values_list("status", flat=True).first()
         else:
@@ -318,9 +323,13 @@ class PsychologistApplication(models.Model):
 
         super().save(*args, **kwargs)
 
-        # Если статус изменился с `PENDING` на `APPROVED`, создаём профиль
         if old_status == "PENDING" and self.status == "APPROVED":
-            PsychologistProfile.process_psychologist_application(self.id)
+            self.user.is_psychologist = True  # Change status to psychologist
+            self.user.save()
+
+            # Optionally, you can also send an email notification to the psychologist
+            from ailaq.emails import send_approval_email
+            send_approval_email(self)
 
     def add_service_session(self, session_type, online_offline, country, city, duration, price, currency):
         """Добавляет новый прием (сессию)."""
@@ -521,6 +530,7 @@ class PsychologistProfile(models.Model):
 def get_default_cost():
     return settings.REQUEST_COST
 
+
 def save(self, *args, **kwargs):
     """
     При изменении статуса заявки на `APPROVED` создаём `PsychologistProfile`
@@ -534,6 +544,13 @@ def save(self, *args, **kwargs):
     # Если это новая заявка и она сразу "APPROVED" → создаём профиль
     if self.pk and (old_status is None or old_status == "PENDING") and self.status == "APPROVED":
         PsychologistProfile.process_psychologist_application(self.id)
+
+        # Создание профиля психолога, если статус "APPROVED"
+        # Важно: передаем фото из заявки, если оно указано
+        profile, created = PsychologistProfile.objects.get_or_create(user=self.user, application=self)
+        if self.profile_picture:  # Если есть фото в заявке
+            profile.profile_picture = self.profile_picture
+            profile.save()
 
 # отзыв за проведенную сессию
 class Review(models.Model):
