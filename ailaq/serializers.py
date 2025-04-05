@@ -447,17 +447,13 @@ class FAQListSerializer(serializers.Serializer):
     )
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
-    # Ссылаемся на профиль пользователя для вывода полной информации
     user = serializers.ReadOnlyField(source="user.email")
-    first_name_ru = serializers.CharField()
-    last_name_ru = serializers.CharField()
-    middle_name_ru = serializers.CharField()
+    full_name = serializers.SerializerMethodField()
     birth_date = serializers.DateField()
     gender = serializers.CharField()
     communication_language = serializers.CharField()
     service_countries = serializers.ListField(child=serializers.CharField())
     service_cities = serializers.ListField(child=serializers.CharField())
-    telegram_id = serializers.CharField()
     about_me_ru = serializers.CharField()
     catalog_description_ru = serializers.CharField()
     qualification = serializers.CharField()
@@ -481,16 +477,23 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
     internal_rating = serializers.FloatField()
     status = serializers.CharField()
     profile_picture_url = serializers.SerializerMethodField()  # добавляем поле для фото профиля
+    telegram_id = serializers.CharField(source='user.telegram_id', read_only=True)
+    purchased_applications = serializers.IntegerField()
+    created_at = serializers.DateTimeField(source='created', read_only=True)
+    updated_at = serializers.DateTimeField(source='updated', read_only=True)
 
     class Meta:
         model = PsychologistApplication
         fields = [
-            'user', 'first_name_ru', 'last_name_ru', 'middle_name_ru', 'birth_date', 'gender', 'communication_language',
-            'service_countries', 'service_cities', 'telegram_id', 'about_me_ru', 'catalog_description_ru',
-            'qualification', 'works_with', 'problems_worked_with', 'work_methods', 'experience_years',
-            'academic_degree', 'additional_specialization', 'additional_psychologist_directions', 'education',
-            'education_files', 'country', 'city', 'office_address', 'office_photo_url', 'service_sessions',
-            'is_verified', 'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'profile_picture_url'
+            'id', 'full_name', 'user', 'telegram_id', 'purchased_applications',
+            'first_name_ru', 'last_name_ru', 'middle_name_ru', 'birth_date', 'gender',
+            'communication_language', 'service_countries', 'service_cities', 'about_me_ru',
+            'catalog_description_ru', 'qualification', 'works_with', 'problems_worked_with',
+            'work_methods', 'experience_years', 'academic_degree', 'additional_specialization',
+            'additional_psychologist_directions', 'education', 'education_files', 'country',
+            'city', 'office_address', 'office_photo_url', 'service_sessions', 'is_verified',
+            'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'created_at', 'updated_at',
+            'profile_picture_url'
         ]
 
     def get_profile_picture_url(self, obj):
@@ -504,6 +507,14 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         if obj.office_photo:
             return obj.office_photo.url
         return None
+
+    def get_full_name(self, obj):
+        """Получает полное имя психолога"""
+        if obj.application:
+            first = obj.application.first_name_ru or ""
+            last = obj.application.last_name_ru or ""
+            return f"{first} {last}".strip() or obj.user.email
+        return obj.user.email
 
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:

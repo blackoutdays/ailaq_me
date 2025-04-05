@@ -303,6 +303,9 @@ class PsychologistApplication(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     documents_requested = models.BooleanField(default=False)
 
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
     def save(self, *args, **kwargs):
         """
         При изменении статуса заявки на `APPROVED` создаём `PsychologistProfile`
