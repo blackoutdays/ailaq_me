@@ -525,7 +525,7 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         """Получает полное имя психолога"""
-        if obj.application:
+        if obj.profile:
             first = obj.application.first_name_ru or ""
             last = obj.application.last_name_ru or ""
             return f"{first} {last}".strip() or obj.user.email
