@@ -312,17 +312,21 @@ class PsychologistApplication(models.Model):
     updated = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        # Get the old status before saving
+        old_status = None
         if self.pk:
             old_status = PsychologistApplication.objects.filter(pk=self.pk).values_list("status", flat=True).first()
-        else:
-            old_status = None
 
         super().save(*args, **kwargs)
 
+        # Когда статус заявки "APPROVED", создается профиль психолога и присваивается роль
         if old_status == "PENDING" and self.status == "APPROVED":
-            self.user.is_psychologist = True  # Change status to psychologist
+            self.user.is_psychologist = True  # Устанавливаем роль психолога
             self.user.save()
+
+            # Создаем профиль психолога
+            profile, created = PsychologistProfile.objects.get_or_create(user=self.user, application=self)
+            profile.is_verified = True
+            profile.save()
 
             # Optionally, you can also send an email notification to the psychologist
             from ailaq.emails import send_approval_email
