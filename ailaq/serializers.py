@@ -77,7 +77,7 @@ def create(self, validated_data):
     user = CustomUser.objects.create(
         email=validated_data['email'],
         wants_to_be_psychologist=wants_to_be_psychologist,
-        is_active=False  # Email должен быть подтверждён
+        is_active=False
     )
     user.set_password(validated_data['password'])
     user.verification_code = get_random_string(length=32)
@@ -639,20 +639,30 @@ class TelegramAuthSerializer(serializers.Serializer):
         return data
 
     def create_or_update_user(self, validated_data):
-        """Создание или обновление пользователя на основе Telegram ID. """
         telegram_id = validated_data['id']
         username = validated_data.get('username', f"user_{telegram_id}")
         first_name = validated_data.get('first_name', "")
+        wants_to_be_psychologist = self.context['request'].data.get('wants_to_be_psychologist', False)
 
         user, created = CustomUser.objects.get_or_create(
             telegram_id=telegram_id,
-            defaults={'email': f"{telegram_id}@telegram.local", 'username': username}
+            defaults={
+                'email': f"{telegram_id}@telegram.local",
+                'username': username,
+                'wants_to_be_psychologist': wants_to_be_psychologist,
+                'is_active': True
+            }
         )
 
         if not created:
             user.username = username
             user.first_name = first_name
             user.save()
+
+        # создаём заявку и профиль, если он хочет быть психологом
+        if wants_to_be_psychologist and not hasattr(user, 'psychologist_application'):
+            application = PsychologistApplication.objects.create(user=user, status="PENDING")
+            PsychologistProfile.objects.create(user=user, application=application)
 
         return user
 
