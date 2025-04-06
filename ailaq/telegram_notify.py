@@ -1,13 +1,29 @@
 # ailaq/telegram_notify.py
 import logging
-
+import requests
+import logging
 from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
-
 from ailaq.models import PsychologistProfile
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+
+logger = logging.getLogger(__name__)
+
+def send_telegram_message_sync(telegram_id, text):
+    """Синхронная обертка для использования в сигнале (без async/await)"""
+    try:
+        url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": telegram_id,
+            "text": text,
+            "parse_mode": "Markdown"
+        }
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+    except Exception as e:
+        logger.error(f"Ошибка при отправке Telegram-сообщения: {e}")
 
 async def get_approved_psychologists():
     psychologists = await sync_to_async(

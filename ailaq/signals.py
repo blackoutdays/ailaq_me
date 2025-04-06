@@ -1,10 +1,10 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from telegram_notify import send_telegram_message_sync
 from .models import (
     CustomUser, PsychologistApplication, PsychologistProfile,
     PsychologistSessionRequest, QuickClientConsultationRequest
 )
-from .telegram_bot import send_telegram_message
 import logging
 from asgiref.sync import async_to_sync
 
@@ -67,7 +67,7 @@ def handle_application_status_change(sender, instance, **kwargs):
         return
 
     try:
-        async_to_sync(send_telegram_message)(
+        async_to_sync(send_telegram_message_sync)(
             telegram_id=telegram_id,
             text=message
         )
