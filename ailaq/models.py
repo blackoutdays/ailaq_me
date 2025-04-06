@@ -139,13 +139,7 @@ class ClientProfile(models.Model):
         blank=True,
         verbose_name="Пол"
     )
-    communication_language = models.CharField(
-        max_length=10,
-        choices=[(tag.name, tag.value) for tag in LanguageEnum],
-        null=True,
-        blank=True,
-        verbose_name="Язык общения"
-    )
+    communication_language = models.JSONField(default=list, blank=True, null=True)
     country = models.CharField(max_length=100, null=True, blank=True, verbose_name="Страна")
     city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Город")
 
@@ -206,16 +200,10 @@ class PsychologistApplication(models.Model):
         choices=[(tag.name, tag.value) for tag in PsychologistGenderEnum],
         null=True, blank=True
     )
-    communication_language = models.CharField(
-        max_length=10,
-        choices=[(tag.name, tag.value) for tag in CommunicationLanguageEnum],
-        null=True, blank=True
-    )
-    # **Страна и город приема (список с фронта)**
+    communication_language = models.JSONField(default=list, blank=True, null=True)
+
     service_countries = models.JSONField(default=list, blank=True, help_text="Список стран приема")
     service_cities = models.JSONField(default=list, blank=True, help_text="Список городов приема")
-
-    telegram_id = models.CharField(max_length=100, null=True, blank=True)  # Ник или ID в Telegram
 
     # О себе
     about_me_ru = models.TextField(null=True, blank=True)
@@ -224,22 +212,16 @@ class PsychologistApplication(models.Model):
     catalog_description_ru = models.TextField(null=True, blank=True)
 
     # Квалификация (специализация)
-    qualification = models.CharField(max_length=100, null=True, blank=True)  # Например "Психолог"
+    qualification = models.JSONField(default=list, blank=True, null=True)
 
     # С кем работает (список)
-    works_with_choices = [
-        ('ADULTS', 'Взрослые'),
-        ('TEENAGERS', 'Подростки'),
-        ('CHILDREN', 'Дети'),
-        ('FAMILY', 'Семья'),
-    ]
-    works_with = models.CharField(max_length=50, choices=works_with_choices, null=True, blank=True)
+    works_with = models.JSONField(default=list, blank=True, null=True)
 
     # С какими проблемами работает
-    problems_worked_with = models.TextField(null=True, blank=True)
+    problems_worked_with = models.JSONField(default=list, blank=True, null=True)
 
     # Методы работы
-    work_methods = models.TextField(null=True, blank=True)
+    work_methods = models.JSONField(default=list, blank=True, null=True)
 
     # Стаж работы (в годах)
     experience_years = models.PositiveIntegerField(null=True, blank=True, verbose_name="Стаж работы (в годах)")
@@ -248,10 +230,10 @@ class PsychologistApplication(models.Model):
     academic_degree = models.CharField(max_length=100, null=True, blank=True)
 
     # Дополнительная специализация
-    additional_specialization = models.TextField(null=True, blank=True)
+    additional_specialization = models.JSONField(default=list, blank=True, null=True)
 
     # Дополнительные направления
-    additional_psychologist_directions = models.TextField(null=True, blank=True)
+    additional_psychologist_directions = models.JSONField(default=list, blank=True, null=True)
 
     # Образование (JSON: Год + Название)
     education = models.JSONField(default=list, blank=True, null=True)
@@ -331,10 +313,6 @@ class PsychologistApplication(models.Model):
             profile.is_verified = True
             profile.save()
 
-            # Отправляем уведомление по email или через систему
-            from ailaq.emails import send_approval_email
-            send_approval_email(self)
-
     def add_service_session(self, session_type, online_offline, country, city, duration, price, currency):
         """Добавляет новый прием (сессию)."""
         session_data = {
@@ -376,6 +354,10 @@ class PsychologistApplication(models.Model):
             doc.delete()
         except EducationDocument.DoesNotExist:
             pass
+
+    @property
+    def telegram_id(self):
+        return self.user.telegram_id
 
     def __str__(self):
         return f"Заявка психолога {self.user.email} (Стаж: {self.experience_years} лет)"
@@ -455,13 +437,6 @@ class PsychologistProfile(models.Model):
                 profile.update_catalog_visibility()  # Проверяем, может ли психолог быть в каталоге
                 profile.save()
 
-                # Отправляем email уведомление
-                from ailaq.emails import send_approval_email
-                send_approval_email(application)
-
-            elif application.status == 'REJECTED':
-                from ailaq.emails import send_rejection_email
-                send_rejection_email(application)
 
         except PsychologistApplication.DoesNotExist:
             logger.error(f"Application with ID {application_id} not found.")
@@ -478,7 +453,7 @@ class PsychologistProfile(models.Model):
 
     def get_average_rating(self) -> float:
         """Возвращает средний рейтинг психолога на основе завершённых сессий."""
-        full_name = self.get_full_name
+        full_name = self.get_full_name()
         average_rating = Review.objects.filter(
             psychologist_name=full_name,
             session_request__status='COMPLETED'  # Фильтруем по session_request
@@ -538,27 +513,6 @@ class PsychologistProfile(models.Model):
 def get_default_cost():
     return settings.REQUEST_COST
 
-
-def save(self, *args, **kwargs):
-    """
-    При изменении статуса заявки на `APPROVED` создаём `PsychologistProfile`
-    """
-    old_status = None
-    if self.pk:
-        old_status = PsychologistApplication.objects.filter(pk=self.pk).values_list("status", flat=True).first()
-
-    super().save(*args, **kwargs)
-
-    # Если это новая заявка и она сразу "APPROVED" → создаём профиль
-    if self.pk and (old_status is None or old_status == "PENDING") and self.status == "APPROVED":
-        PsychologistProfile.process_psychologist_application(self.id)
-
-        # Создание профиля психолога, если статус "APPROVED"
-        # Важно: передаем фото из заявки, если оно указано
-        profile, created = PsychologistProfile.objects.get_or_create(user=self.user, application=self)
-        if self.profile_picture:  # Если есть фото в заявке
-            profile.profile_picture = self.profile_picture
-            profile.save()
 
 # отзыв за проведенную сессию
 class Review(models.Model):

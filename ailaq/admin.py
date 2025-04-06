@@ -5,7 +5,6 @@ from .services import process_psychologist_application, send_documents_request_e
 import logging
 logger = logging.getLogger(__name__)
 
-# FAQ психолога: вопрос/ответ
 class PsychologistFAQInline(admin.TabularInline):
     model = PsychologistFAQ
     extra = 1
@@ -14,7 +13,7 @@ class PsychologistFAQInline(admin.TabularInline):
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
     list_display = ['user', 'telegram_id', 'get_user_email']
-    search_fields = ['user__email', 'user__telegram_id']  # Поиск по email и Telegram ID
+    search_fields = ['user__email', 'user__telegram_id']
 
     @admin.display(description='Telegram ID')
     def telegram_id(self, obj):

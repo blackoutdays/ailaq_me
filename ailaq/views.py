@@ -85,7 +85,7 @@ class TelegramAuthView(APIView):
         user = CustomUser.objects.filter(telegram_id=telegram_id).first()
 
         if not user:
-            # 🔹 РЕГИСТРАЦИЯ
+            # РЕГИСТРАЦИЯ
             user = CustomUser.objects.create(
                 telegram_id=telegram_id,
                 username=username,
@@ -105,7 +105,7 @@ class TelegramAuthView(APIView):
             except Exception as e:
                 logger.error(f"❌ Ошибка при создании заявки/профиля: {e}")
         else:
-            # 🔁 ВХОД — обновим имя или активность
+            # ВХОД — обновим имя или активность
             updated = False
             if user.username != username:
                 user.username = username
@@ -962,7 +962,6 @@ class ReviewCreateView(APIView):
         session.save()
 
         return Response(ReviewSerializer(review).data, status=201)
-
 
 class TopicListView(APIView):
     def get(self, request):

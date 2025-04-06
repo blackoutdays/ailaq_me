@@ -1,4 +1,3 @@
-# ailaq/services.py
 from .models import PsychologistApplication, PsychologistProfile, CustomUser
 from .emails import send_approval_email, send_rejection_email, send_documents_request_email
 import logging
@@ -30,30 +29,3 @@ def process_psychologist_application(application_id):
 
     except PsychologistApplication.DoesNotExist:
         logger.error(f"Application with ID {application_id} not found.")
-
-def handle_missing_documents(application_id):
-    """
-    Обрабатывает запрос на предоставление недостающих документов.
-    """
-    try:
-        application = PsychologistApplication.objects.get(id=application_id)
-        if not application.documents_requested:
-            application.documents_requested = True
-            application.status = 'DOCUMENTS_REQUESTED'
-            application.save()
-            send_documents_request_email(application)
-            logger.info(f"Document request email sent for application ID {application_id}.")
-    except PsychologistApplication.DoesNotExist:
-        logger.error(f"Application with ID {application_id} not found.")
-
-def link_telegram_user(request):
-    # Получаем пользователя
-    user = CustomUser.objects.get(telegram_id=request.data['telegram_id'])
-
-    # Генерация кода, если он отсутствует
-    if not user.verification_code:
-        user.verification_code = CustomUser.objects.generate_unique_verification_code()
-
-    # Сохраняем пользователя с установленным verification_code
-    user.save()
-    return user
