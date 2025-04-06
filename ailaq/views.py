@@ -58,7 +58,6 @@ bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
-
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def post(self, request):
@@ -79,7 +78,7 @@ class TelegramAuthView(APIView):
         if not hmac.compare_digest(calculated_hash, received_hash):
             return Response({"error": "Неверная подпись"}, status=400)
 
-        # 2. Извлекаем данные
+        # 2. Данные пользователя
         telegram_id = int(auth_data['id'])
         username = auth_data.get('username', f"tg_{telegram_id}")
         wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
@@ -88,23 +87,27 @@ class TelegramAuthView(APIView):
         user = CustomUser.objects.filter(telegram_id=telegram_id).first()
 
         if not user:
-            # ➕ РЕГИСТРАЦИЯ
-            with transaction.atomic():
-                user = CustomUser.objects.create(
-                    telegram_id=telegram_id,
-                    username=username,
-                    is_active=True,
-                    wants_to_be_psychologist=wants_to_be_psychologist
-                )
+            # 🔹 РЕГИСТРАЦИЯ
+            user = CustomUser.objects.create(
+                telegram_id=telegram_id,
+                username=username,
+                is_active=True,
+                wants_to_be_psychologist=wants_to_be_psychologist
+            )
 
-                if wants_to_be_psychologist:
-                    application = PsychologistApplication.objects.create(user=user, status="PENDING")
-                    PsychologistProfile.objects.create(user=user, application=application)
-                else:
-                    ClientProfile.objects.create(user=user)
-
+            try:
+                with transaction.atomic():
+                    if wants_to_be_psychologist:
+                        application, _ = PsychologistApplication.objects.get_or_create(
+                            user=user, defaults={"status": "PENDING"}
+                        )
+                        PsychologistProfile.objects.get_or_create(user=user, application=application)
+                    else:
+                        ClientProfile.objects.get_or_create(user=user)
+            except Exception as e:
+                logger.error(f"❌ Ошибка при создании заявки/профиля: {e}")
         else:
-            # 🔁 ВХОД
+            # 🔁 ВХОД — обновим имя или активность
             updated = False
             if user.username != username:
                 user.username = username
@@ -118,16 +121,16 @@ class TelegramAuthView(APIView):
         # 4. Генерация токенов
         refresh = RefreshToken.for_user(user)
 
-        # 5. Telegram приветствие
+        # 5. Приветствие в Telegram
         try:
             async_to_sync(send_telegram_message)(
                 telegram_id=telegram_id,
                 text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
             )
         except Exception as e:
-            logger.error(f"❌ Ошибка при отправке сообщения в Telegram: {e}")
+            logger.error(f"❌ Ошибка при отправке Telegram-сообщения: {e}")
 
-        # 6. Ответ
+        # 6. Ответ клиенту
         return Response({
             "access_token": str(refresh.access_token),
             "refresh_token": str(refresh),
