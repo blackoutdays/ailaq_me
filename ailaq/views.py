@@ -1277,33 +1277,54 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['post'], url_path='update-status')
     def update_status(self, request, pk=None):
-        """Изменить статус заявки психолога."""
         try:
-            # Получаем объект заявки
             application = self.get_object()
+            user = application.user
 
-            # Получаем новый статус из тела запроса
-            status = request.data.get('status')
+            new_status = request.data.get('status')
+            rejection_comment = request.data.get('rejection_comment')  # из тела запроса
 
-            # Проверка на корректность статуса
-            if status not in ['APPROVED', 'REJECTED']:
+            if new_status not in ['APPROVED', 'REJECTED']:
                 return Response({"detail": "Неверный статус."}, status=400)
 
-            # Обновляем статус заявки
-            application.status = status
+            if new_status == 'REJECTED' and not rejection_comment:
+                return Response(
+                    {"detail": "При отклонении необходимо указать причину (rejection_comment)."},
+                    status=400
+                )
+
+            # Обновление статуса и комментария
+            application.status = new_status
+            if new_status == 'REJECTED':
+                application.previous_rejection_comment = rejection_comment
             application.save()
 
-            # Если статус "APPROVED", создаем профиль для психолога
-            if status == 'APPROVED':
-                PsychologistProfile.objects.get_or_create(user=application.user, application=application)
+            # Создание профиля при одобрении
+            if new_status == 'APPROVED':
+                PsychologistProfile.objects.get_or_create(user=user, application=application)
 
-            # Логируем успешное обновление статуса
-            logger.info(f"Статус заявки психолога обновлен на {status} для пользователя {application.user.id}")
+            # Telegram уведомление
+            from asgiref.sync import async_to_sync
 
-            return Response({"detail": f"Статус заявки обновлен на {status}."}, status=200)
+            if user.telegram_id:
+                if new_status == 'APPROVED':
+                    async_to_sync(send_telegram_message)(
+                        telegram_id=user.telegram_id,
+                        text="✅ Ваша заявка психолога одобрена! Добро пожаловать на платформу."
+                    )
+                elif new_status == 'REJECTED':
+                    async_to_sync(send_telegram_message)(
+                        telegram_id=user.telegram_id,
+                        text=(
+                            "❌ Ваша заявка на роль психолога была отклонена.\n\n"
+                            f"Причина: {rejection_comment}"
+                        )
+                    )
+
+            logger.info(f"Статус заявки обновлён на {new_status} для пользователя {user.id}")
+            return Response({"detail": f"Статус заявки обновлен на {new_status}."}, status=200)
 
         except Exception as e:
-            # Логируем ошибку, если что-то пошло не так
             logger.error(f"Ошибка при обновлении статуса заявки психолога: {str(e)}")
             return Response({"detail": "Произошла ошибка при обновлении статуса."}, status=500)
 
@@ -1332,7 +1353,7 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Заявка не найдена."}, status=status.HTTP_404_NOT_FOUND)
 
 class AdminApprovePsychologistView(APIView):
-    permission_classes = [IsAdminUser]  # Только для администраторов
+    permission_classes = [IsAdminUser]
 
     def post(self, request, psychologist_id, status):
         try:

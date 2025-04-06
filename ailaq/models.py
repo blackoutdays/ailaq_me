@@ -110,8 +110,10 @@ class CustomUser(AbstractBaseUser):
 
     @property
     def role(self):
-        """Возвращает роль пользователя (психолог или клиент)"""
-        return 'PSYCHOLOGIST' if self.is_psychologist else 'CLIENT'
+        """Возвращает роль пользователя"""
+        if self.wants_to_be_psychologist:
+            return 'PSYCHOLOGIST'
+        return 'CLIENT'
 
     def has_perm(self, perm, obj=None):
         return self.is_superuser
@@ -310,6 +312,7 @@ class PsychologistApplication(models.Model):
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    previous_rejection_comment = models.TextField(null=True, blank=True, verbose_name="Комментарий к отклонению")
 
     def save(self, *args, **kwargs):
         old_status = None
