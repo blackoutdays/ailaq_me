@@ -1362,15 +1362,15 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
 class AdminApprovePsychologistView(APIView):
     permission_classes = [IsAdminUser]
 
-    def post(self, request, psychologist_id, status):
+    def post(self, request, psychologist_id, new_status):
         try:
             application = PsychologistApplication.objects.get(user_id=psychologist_id)
             user = application.user
 
-            if status not in ["APPROVED", "REJECTED"]:
+            if new_status not in ["APPROVED", "REJECTED"]:
                 return Response({"detail": "Неверный статус."}, status=status.HTTP_400_BAD_REQUEST)
 
-            application.status = status
+            application.status = new_status
             application.save()
 
             # Профиль и привязка заявки
@@ -1379,10 +1379,14 @@ class AdminApprovePsychologistView(APIView):
                 profile.application = application
                 profile.save(update_fields=["application"])
 
-            return Response({"detail": f"Статус заявки обновлён на {status}."}, status=status.HTTP_200_OK)
+            return Response(
+                {"detail": f"Статус заявки обновлён на {new_status}."},
+                status=status.HTTP_200_OK
+            )
 
         except PsychologistApplication.DoesNotExist:
             return Response({"detail": "Заявка не найдена."}, status=status.HTTP_404_NOT_FOUND)
+
         except Exception as e:
             logger.error(f"Ошибка при одобрении/отклонении: {str(e)}")
             return Response({"detail": "Ошибка сервера."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
