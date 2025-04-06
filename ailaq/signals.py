@@ -1,6 +1,6 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from telegram_notify import send_telegram_message_sync
+from .telegram_notify import send_telegram_message_sync
 from .models import (
     CustomUser, PsychologistApplication, PsychologistProfile,
     PsychologistSessionRequest, QuickClientConsultationRequest

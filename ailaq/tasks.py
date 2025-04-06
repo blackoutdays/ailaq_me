@@ -1,5 +1,4 @@
 from asgiref.sync import async_to_sync
-
 from .models import PsychologistApplication, PsychologistLevel, QuickClientConsultationRequest
 from datetime import date
 from celery import shared_task
