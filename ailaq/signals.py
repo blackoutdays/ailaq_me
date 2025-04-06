@@ -6,7 +6,6 @@ from .models import (
     PsychologistSessionRequest, QuickClientConsultationRequest
 )
 import logging
-from asgiref.sync import async_to_sync
 
 logger = logging.getLogger(__name__)
 
