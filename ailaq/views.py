@@ -3,7 +3,7 @@ import uuid
 from hashlib import sha256
 from rest_framework import generics
 from rest_framework.decorators import action
-from .serializers import UserIdSerializer, UpdatePsychologistApplicationStatusSerializer
+from .serializers import UserIdSerializer
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -29,7 +29,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter, OpenApiTypes
 from config import settings
-from .emails import send_rejection_email, send_approval_email
 from .models import PsychologistProfile, PsychologistApplication, ClientProfile, CustomUser, \
     PsychologistFAQ, Review, QuickClientConsultationRequest, Topic, EducationDocument
 from .serializers import (
@@ -40,7 +39,7 @@ from .serializers import (
 )
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
-from rest_framework.viewsets import ReadOnlyModelViewSet, ModelViewSet
+from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser, FormParser
 import telegram
@@ -50,7 +49,6 @@ from .telegram_bot import send_telegram_message, notify_psychologist_telegram
 from .models import PsychologistSessionRequest
 from .serializers import AnonymousSessionRequestSerializer, AuthenticatedSessionRequestSerializer
 
-logger = logging.getLogger(__name__)
 logger = logging.getLogger("telegram_auth")
 User = get_user_model()
 bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
