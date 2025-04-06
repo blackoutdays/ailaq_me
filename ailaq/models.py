@@ -185,7 +185,6 @@ class EducationDocument(models.Model):
 # форма заявки/профиль (только для психолога)
 class PsychologistApplication(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
-
     profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
 
     # Личная информация
