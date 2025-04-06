@@ -67,16 +67,9 @@ def handle_application_status_change(sender, instance, **kwargs):
         return
 
     try:
-        async_to_sync(send_telegram_message_sync)(
+        send_telegram_message_sync(
             telegram_id=telegram_id,
             text=message
         )
     except Exception as e:
         logger.error(f"Ошибка при отправке Telegram-сообщения: {e}")
-
-@receiver(post_save, sender=CustomUser)
-def create_application_and_profile_for_candidate(sender, instance, created, **kwargs):
-    if instance.wants_to_be_psychologist:
-        from ailaq.models import PsychologistApplication, PsychologistProfile
-        app, _ = PsychologistApplication.objects.get_or_create(user=instance)
-        PsychologistProfile.objects.get_or_create(user=instance, application=app)
