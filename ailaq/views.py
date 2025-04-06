@@ -13,7 +13,8 @@ from rest_framework.exceptions import NotFound, ValidationError, PermissionDenie
 from rest_framework.serializers import Serializer, EmailField
 from django.utils.crypto import get_random_string
 from datetime import timedelta
-from . import models, permissions
+from django.db import transaction
+from . import models
 from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramAuthSerializer, \
     AuthenticatedQuickClientConsultationRequestSerializer, \
     QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
@@ -57,12 +58,12 @@ bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
-
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def post(self, request):
         print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.data}")
 
+        # 1. Проверка подписи (hash)
         received_hash = request.data.get('hash')
         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
         auth_data = {k: request.data[k] for k in telegram_fields if k in request.data}
@@ -77,32 +78,34 @@ class TelegramAuthView(APIView):
         if not hmac.compare_digest(calculated_hash, received_hash):
             return Response({"error": "Неверная подпись"}, status=400)
 
+        # 2. Основные данные
         telegram_id = int(auth_data['id'])
         username = auth_data.get('username', f"tg_{telegram_id}")
-
-        # ⚠️ Берем только при первом входе (ниже проверим)
         wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
         user = User.objects.filter(telegram_id=telegram_id).first()
 
-        # 🔹 Новый пользователь — регистрация
         if not user:
+            # Новый пользователь
             user = User.objects.create(
                 username=username,
                 telegram_id=telegram_id,
                 is_active=True,
-                wants_to_be_psychologist=wants_to_be_psychologist,
+                wants_to_be_psychologist=wants_to_be_psychologist
             )
 
-            # создаем заявку и профиль если хочет быть психологом
-            if wants_to_be_psychologist:
-                application = PsychologistApplication.objects.create(user=user, status="PENDING")
-                PsychologistProfile.objects.create(user=user, application=application)
-            else:
-                ClientProfile.objects.create(user=user)
+            try:
+                with transaction.atomic():
+                    if wants_to_be_psychologist:
+                        application, _ = PsychologistApplication.objects.get_or_create(user=user, defaults={"status": "PENDING"})
+                        PsychologistProfile.objects.get_or_create(user=user, application=application)
+                    else:
+                        ClientProfile.objects.get_or_create(user=user)
+            except Exception as e:
+                logger.error(f"Ошибка при создании заявки/профиля: {e}")
 
-        # 🔹 Уже зарегистрирован — просто обновляем имя или активность
         else:
+            #  Повторный вход — просто обновим имя и статус активности
             updated = False
             if user.username != username:
                 user.username = username
@@ -110,28 +113,27 @@ class TelegramAuthView(APIView):
             if not user.is_active:
                 user.is_active = True
                 updated = True
-
             if updated:
                 user.save()
 
-        # Токены
+        # 3. Генерация токенов
         refresh = RefreshToken.for_user(user)
 
-        # Telegram приветствие
+        # 4. Приветствие
         try:
             async_to_sync(send_telegram_message)(
                 telegram_id=telegram_id,
                 text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
             )
         except Exception as e:
-            logger.error(f"Ошибка отправки сообщения в Telegram: {e}")
+            logger.error(f"Ошибка при отправке Telegram-сообщения: {e}")
 
         return Response({
-            'access_token': str(refresh.access_token),
-            'refresh_token': str(refresh),
-            'user_id': user.id,
-            'role': user.role,
-            'message': "Telegram успешно привязан",
+            "access_token": str(refresh.access_token),
+            "refresh_token": str(refresh),
+            "user_id": user.id,
+            "role": user.role,
+            "message": "Telegram успешно привязан"
         })
 
 class QuickClientConsultationAPIView(APIView):
