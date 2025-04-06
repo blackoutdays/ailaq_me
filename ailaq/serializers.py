@@ -507,11 +507,12 @@ class FAQListSerializer(serializers.Serializer):
     )
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
-    user = serializers.ReadOnlyField(source="user.email")
+    # user = serializers.ReadOnlyField(source="user.email")
     full_name = serializers.SerializerMethodField()
     birth_date = serializers.DateField()
     gender = serializers.CharField()
     communication_language = serializers.CharField()
+    telegram_id = serializers.SerializerMethodField()
     service_countries = serializers.ListField(child=serializers.CharField())
     service_cities = serializers.ListField(child=serializers.CharField())
     about_me_ru = serializers.CharField()
@@ -536,8 +537,7 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
     rating_system = serializers.FloatField()
     internal_rating = serializers.FloatField()
     status = serializers.CharField()
-    profile_picture_url = serializers.SerializerMethodField()  # добавляем поле для фото профиля
-    telegram_id = serializers.CharField(source='user.telegram_id', read_only=True)
+    profile_picture_url = serializers.SerializerMethodField()
     purchased_applications = serializers.IntegerField()
     created_at = serializers.DateTimeField(source='created', read_only=True)
     updated_at = serializers.DateTimeField(source='updated', read_only=True)
@@ -545,7 +545,7 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistApplication
         fields = [
-            'id', 'full_name', 'user', 'telegram_id', 'purchased_applications',
+            'id', 'full_name', 'telegram_id', 'purchased_applications',
             'first_name_ru', 'last_name_ru', 'middle_name_ru', 'birth_date', 'gender',
             'communication_language', 'service_countries', 'service_cities', 'about_me_ru',
             'catalog_description_ru', 'qualification', 'works_with', 'problems_worked_with',
@@ -574,6 +574,9 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         last = obj.last_name_ru or ""
         return f"{first} {last}".strip() or obj.user.email
         return obj.user.email
+
+    def get_telegram_id(self, obj):
+        return obj.user.telegram_id
 
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:
@@ -630,20 +633,24 @@ class CatalogSerializer(serializers.ModelSerializer):
 #для вьющек сериализаторы по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
     profile_picture = serializers.ImageField(required=False, allow_null=True)
+    telegram_id = serializers.SerializerMethodField()
+
     class Meta:
         model = PsychologistApplication
         fields = [
             'first_name_ru', 'last_name_ru', 'middle_name_ru',
             'birth_date', 'gender', 'communication_language',
-            'service_countries', 'service_cities', 'telegram_id', 'about_me_ru', 'catalog_description_ru', 'profile_picture'
+            'service_countries', 'service_cities', 'telegram_id',
+            'about_me_ru', 'catalog_description_ru', 'profile_picture'
         ]
+
+    def get_telegram_id(self, obj):
+        return obj.user.telegram_id
 
     def update(self, instance, validated_data):
         profile_picture = validated_data.pop('profile_picture', None)
-
         if profile_picture:
             instance.profile_picture = profile_picture
-
         return super().update(instance, validated_data)
 
 # Квалификация психолога

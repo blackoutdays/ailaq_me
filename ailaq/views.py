@@ -1246,8 +1246,6 @@ class UploadProfilePhotoView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-
-
 class PsychologistApplicationViewSet(viewsets.ModelViewSet):
     queryset = PsychologistApplication.objects.all()
     serializer_class = PsychologistApplicationSerializer
@@ -1350,12 +1348,13 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
 
         except PsychologistApplication.DoesNotExist:
             return Response({"detail": "Заявка не найдена."}, status=status.HTTP_404_NOT_FOUND)
+
 class AdminApprovePsychologistView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request, *args, **kwargs):
         psychologist_id = kwargs.get("psychologist_id")
-        new_status_param = kwargs.get("status")  # это "APPROVED" или "REJECTED"
+        new_status_param = kwargs.get("status")  # "APPROVED" или "REJECTED"
         rejection_comment = request.data.get("rejection_comment")
 
         try:
@@ -1376,11 +1375,30 @@ class AdminApprovePsychologistView(APIView):
                 application.previous_rejection_comment = rejection_comment
             application.save()
 
-            # Привязка заявки к профилю
-            profile, _ = PsychologistProfile.objects.get_or_create(user=user)
-            if profile.application != application:
-                profile.application = application
-                profile.save(update_fields=["application"])
+            if new_status_param == "APPROVED":
+                # Создаём профиль, если его нет, или обновляем заявку
+                profile = PsychologistProfile.objects.filter(user=user).first()
+                if not profile:
+                    profile = PsychologistProfile.objects.create(user=user, application=application)
+                elif profile.application != application:
+                    profile.application = application
+                    profile.save(update_fields=["application"])
+
+            # Telegram уведомление
+            if user.telegram_id:
+                if new_status_param == 'APPROVED':
+                    async_to_sync(send_telegram_message)(
+                        telegram_id=user.telegram_id,
+                        text="✅ Ваша заявка психолога одобрена! Добро пожаловать на платформу."
+                    )
+                elif new_status_param == 'REJECTED':
+                    async_to_sync(send_telegram_message)(
+                        telegram_id=user.telegram_id,
+                        text=(
+                            "❌ Ваша заявка на роль психолога была отклонена.\n\n"
+                            f"Причина: {rejection_comment}"
+                        )
+                    )
 
             return Response(
                 {"detail": f"Статус заявки обновлён на {new_status_param}."},
@@ -1390,5 +1408,5 @@ class AdminApprovePsychologistView(APIView):
         except PsychologistApplication.DoesNotExist:
             return Response({"detail": "Заявка не найдена."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Ошибка при обновлении статуса: {str(e)}")
+            logger.error(f"❌ Ошибка при обновлении статуса заявки: {str(e)}")
             return Response({"detail": "Ошибка сервера."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
