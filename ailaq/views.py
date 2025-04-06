@@ -61,12 +61,10 @@ class TelegramAuthPageView(View):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
-    permission_classes = [AllowAny]
-
     def post(self, request):
-        logger.info(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.data}")
+        print(f"📥 ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.data}")
 
-        # 1. Проверка подписи
+        # 1. Подпись Telegram
         received_hash = request.data.get('hash')
         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
         auth_data = {k: request.data[k] for k in telegram_fields if k in request.data}
@@ -81,20 +79,23 @@ class TelegramAuthView(APIView):
         if not hmac.compare_digest(calculated_hash, received_hash):
             return Response({"error": "Неверная подпись"}, status=400)
 
-        # 2. Данные
+        # 2. Извлечение данных
         telegram_id = int(auth_data['id'])
         username = auth_data.get('username', f"tg_{telegram_id}")
+
+        # ✅ Берём wants_to_be_psychologist только при первом входе
         wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
+        # 3. Проверка существующего пользователя
         user = User.objects.filter(telegram_id=telegram_id).first()
 
-        # 3. Новый пользователь
         if not user:
+            # 📌 Новый пользователь — регистрация
             user = User.objects.create(
-                telegram_id=telegram_id,
                 username=username,
+                telegram_id=telegram_id,
                 is_active=True,
-                wants_to_be_psychologist=wants_to_be_psychologist
+                wants_to_be_psychologist=wants_to_be_psychologist,
             )
 
             try:
@@ -105,10 +106,10 @@ class TelegramAuthView(APIView):
                     else:
                         ClientProfile.objects.get_or_create(user=user)
             except Exception as e:
-                logger.error(f"Ошибка при создании заявки/профиля: {e}")
+                logger.error(f"❌ Ошибка при создании заявки/профиля: {e}")
 
         else:
-            # 4. Повторный вход
+            # 🔁 Уже зарегистрирован — просто обновляем имя/активность
             updated = False
             if user.username != username:
                 user.username = username
@@ -119,18 +120,19 @@ class TelegramAuthView(APIView):
             if updated:
                 user.save()
 
-        # 5. Генерация токенов
+        # 4. Токены
         refresh = RefreshToken.for_user(user)
 
-        # 6. Приветствие
+        # 5. Telegram сообщение
         try:
             async_to_sync(send_telegram_message)(
                 telegram_id=telegram_id,
                 text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
             )
         except Exception as e:
-            logger.error(f"Ошибка при отправке сообщения в Telegram: {e}")
+            logger.error(f"❌ Ошибка при отправке Telegram-сообщения: {e}")
 
+        # 6. Ответ
         return Response({
             "access_token": str(refresh.access_token),
             "refresh_token": str(refresh),
