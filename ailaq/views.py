@@ -566,8 +566,14 @@ class PsychologistProfileView(APIView):
                 logger.error(f"Заявка психолога не найдена для пользователя {request.user.id}")
                 return Response({"error": "Заявка психолога не найдена."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Получаем отзывы (если они привязаны к заявке)
-            reviews = Review.objects.filter(psychologist__application=application).order_by("-created_at")
+            # Получаем профиль психолога
+            psychologist = PsychologistProfile.objects.filter(user=request.user).first()
+            if not psychologist:
+                logger.error(f"Профиль психолога не найден для пользователя {request.user.id}")
+                return Response({"error": "Профиль психолога не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+            # Получаем отзывы по полю psychologist
+            reviews = Review.objects.filter(psychologist=psychologist).order_by("-created_at")
             reviews_serializer = ReviewSerializer(reviews, many=True)
 
             # Формируем данные для ответа

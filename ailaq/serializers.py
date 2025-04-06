@@ -398,10 +398,11 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
         fields = ['profile_id', 'full_name', 'age', 'qualification', 'experience_years', 'country', 'city', 'about_me', 'profile_picture_url']
 
     def get_full_name(self, obj):
-        """Получает полное имя психолога из самой заявки"""
-        first = obj.first_name_ru or ""
-        last = obj.last_name_ru or ""
-        return f"{first} {last}".strip() or obj.user.email
+        if obj.application:
+            first = obj.application.first_name_ru or ""
+            last = obj.application.last_name_ru or ""
+            return f"{first} {last}".strip()
+        return ""
 
     def get_age(self, obj):
         """Вычисляет возраст психолога по дате рождения (если есть)"""
@@ -569,11 +570,11 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         return None
 
     def get_full_name(self, obj):
-        """Получает полное имя психолога из самой заявки"""
-        first = obj.first_name_ru or ""
-        last = obj.last_name_ru or ""
-        return f"{first} {last}".strip() or obj.user.email
-        return obj.user.email
+        if obj.application:
+            first = obj.application.first_name_ru or ""
+            last = obj.application.last_name_ru or ""
+            return f"{first} {last}".strip()
+        return ""
 
     def get_telegram_id(self, obj):
         return obj.user.telegram_id
