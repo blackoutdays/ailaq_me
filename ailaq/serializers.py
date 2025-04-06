@@ -669,9 +669,19 @@ class QualificationSerializer(serializers.ModelSerializer):
         ]
 
 class UserIdSerializer(serializers.ModelSerializer):
+    telegram_id = serializers.CharField()
+    full_name = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'email', 'is_psychologist']
+        fields = ['id', 'telegram_id', 'full_name', 'is_psychologist']
+
+    def get_full_name(self, obj):
+        if hasattr(obj, "application") and obj.application:
+            first = obj.application.first_name_ru or ""
+            last = obj.application.last_name_ru or ""
+            return f"{first} {last}".strip()
+        return ""
 
 #admin
 class UpdatePsychologistApplicationStatusSerializer(serializers.ModelSerializer):

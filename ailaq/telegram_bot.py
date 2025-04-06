@@ -130,10 +130,10 @@ async def handle_accept_callback(update, context):
         await bot.send_message(
             chat_id=query.from_user.id,
             text=(
-                f"📢 Вы приняли заявку!"
-                f"👤 Клиент: {session.client_name}"
-                f"🌐 Telegram ID: {session.telegram_id}"
-                f"🧠 Тема: {session.topic}"
+                f"📢 Вы приняли заявку!\n"
+                f"👤 Клиент: {session.client_name}\n"
+                f"{f'🌐 Telegram: @{session.user.username}' if session.user and session.user.username else f'🌐 Telegram ID: {session.telegram_id}'}\n"
+                f"🧠 Тема: {session.topic}\n"
                 f"💬 {session.comments or 'нет'}"
             )
         )
@@ -278,11 +278,11 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
         await bot.send_message(
             chat_id=query.from_user.id,
             text=(
-                f"📢 Вы приняли заявку!"
-                f"👤 Клиент: {session.client_name}"
-                f"🌐 Telegram ID: {session.telegram_id}"
-                f"🧠 Тема: {session.topic}"
-                f"💬 {session.comments or 'нет'}"
+                f"📢 Вы приняли заявку!\n"
+                f"👤 Клиент: {session.client_name}\n"
+                f"🌐 Telegram: @{session.user.username}" if session.user and session.user.username else f"🌐 Telegram ID: {session.telegram_id}\n"
+                f"🧠 Тема: {session.topic}\n"
+                f"💬 {session.comments or 'нет'}\n"
             )
         )
 
@@ -412,7 +412,7 @@ async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_telegram_message(
             psychologist.user.telegram_id,
             f"✅ Вы приняли заявку от клиента: {consultation.client_name}\n"
-            f"📩 Telegram ID клиента: {consultation.telegram_id}\n"
+            f"📩 Telegram клиента: @{client_profile.user.username}" if client_profile.user.username else f"📩 Telegram ID: {consultation.telegram_id}\n"
             f"👤 Возраст: {consultation.age}, Пол: {consultation.gender}\n"
             f"🧠 Тема: {consultation.topic}\n"
             f"💬 Комментарий: {consultation.comments}"
