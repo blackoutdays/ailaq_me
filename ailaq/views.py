@@ -1,6 +1,9 @@
+import base64
 import hmac
 import uuid
 from hashlib import sha256
+
+from django.core.files.base import ContentFile
 from rest_framework import generics
 from rest_framework.decorators import action
 from .serializers import UserIdSerializer
@@ -41,7 +44,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import telegram
 import logging
 
@@ -642,12 +645,7 @@ class PersonalInfoView(APIView):
 
 # Сохранение и получение квалификации
 class QualificationView(APIView):
-    """
-    Сохранение квалификации психолога, включая загрузку файлов.
-    """
     permission_classes = [IsAuthenticated]
-    parser_classes = (MultiPartParser, FormParser)
-
     @extend_schema(
         tags=["Психолог"],
         summary="Получить квалификацию психолога",
@@ -675,34 +673,30 @@ class QualificationView(APIView):
             serializer = QualificationSerializer(application, data=request.data, partial=True)
 
             if serializer.is_valid():
-                # Сохранение полей квалификации
                 serializer.save()
 
-                # Обработка загружаемых файлов
-                office_photo = serializer.validated_data.get('office_photo')
                 education_files = serializer.validated_data.get('education_files', [])
 
-                # Сохранение фото офиса
-                if office_photo:
-                    application.office_photo = office_photo
-
-                # Сохранение документов об образовании
                 for file_data in education_files:
-                    document = file_data.get('document')
+                    document_base64 = file_data.get('document')
+                    title = file_data.get('title', 'Документ')
                     year = file_data.get('year')
-                    title = file_data.get('title') or document.name
-                    file_signature = file_data.get('file_signature', "")
+                    file_signature = file_data.get('file_signature', '')
 
-                    EducationDocument.objects.create(
-                        psychologist_application=application,
-                        document=document,
-                        year=year,
-                        title=title,
-                        file_signature=file_signature
-                    )
+                    if document_base64:
+                        format, data = document_base64.split(';base64,')
+                        ext = format.split('/')[-1]
+                        file = ContentFile(base64.b64decode(data), name=f"{title}.{ext}")
+
+                        EducationDocument.objects.create(
+                            psychologist_application=application,
+                            document=file,
+                            title=title,
+                            year=year,
+                            file_signature=file_signature
+                        )
 
                 application.save()
-
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

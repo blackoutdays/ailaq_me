@@ -1,13 +1,10 @@
 # ailaq/telegram_notify.py
 import logging
 import requests
-import logging
 from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
 from ailaq.models import PsychologistProfile
-
-bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +38,6 @@ async def get_approved_psychologists():
     return approved_psychologists
 
 async def notify_all_psychologists(consultation):
-    # Получаем одобренных психологов
     approved_psychologists = await get_approved_psychologists()
 
     message = (
@@ -57,7 +53,8 @@ async def notify_all_psychologists(consultation):
 
     for p in approved_psychologists:
         try:
-            await bot.send_message(chat_id=p.user.telegram_id, text=message)
+            dynamic_bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+            await dynamic_bot.send_message(chat_id=p.user.telegram_id, text=message)
             logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
         except Exception as e:
             logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")

@@ -126,16 +126,19 @@ async def handle_accept_callback(update, context):
             text=new_text,
             parse_mode="Markdown"
         )
-        # Получаем пользователя по telegram_id (клиент)
         session_user = await sync_to_async(User.objects.filter(telegram_id=session.telegram_id).first)()
-        username = f"@{session_user.username}" if session_user and session_user.username else f"{session.telegram_id}"
+        telegram_info = (
+            f"🌐 Telegram: @{session_user.username}"
+            if session_user and session_user.username
+            else f"🌐 Telegram ID: {session.telegram_id}"
+        )
 
         await bot.send_message(
             chat_id=query.from_user.id,
             text=(
                 f"📢 Вы приняли заявку!\n"
                 f"👤 Клиент: {session.client_name}\n"
-                f"🌐 Telegram: {username}\n"
+                f"{telegram_info}\n"
                 f"🧠 Тема: {session.topic}\n"
                 f"💬 {session.comments or 'нет'}"
             )

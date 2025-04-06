@@ -10,6 +10,7 @@ from django.contrib.auth.password_validation import validate_password
 import hmac
 from .tasks import send_email_async
 import time
+from drf_extra_fields.fields import Base64ImageField, Base64FileField
 from datetime import timedelta
 from django.utils.crypto import get_random_string
 from django.utils.timezone import now
@@ -137,9 +138,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 class LoginSerializer(serializers.Serializer):
-    """
-    Сериализатор для входа пользователя (клиент или психолог).
-    """
+    """ Сериализатор для входа пользователя (клиент или психолог) """
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
@@ -418,7 +417,6 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
             return obj.profile_picture.url
         return None
 
-
 class EducationDocumentSerializer(serializers.ModelSerializer):
     document = serializers.FileField(required=True)
     year = serializers.IntegerField(required=False, allow_null=True)
@@ -655,9 +653,16 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 # Квалификация психолога
+
+class EducationDocumentInputSerializer(serializers.Serializer):
+    document = Base64FileField(required=True)
+    year = serializers.IntegerField(required=False, allow_null=True)
+    title = serializers.CharField(required=False, allow_blank=True)
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
 class QualificationSerializer(serializers.ModelSerializer):
-    office_photo = serializers.ImageField(required=False, allow_null=True)
-    education_files = EducationDocumentSerializer(many=True, required=False)
+    office_photo = Base64ImageField(required=False, allow_null=True)
+    education_files = EducationDocumentInputSerializer(many=True, required=False)
     file_signature = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:

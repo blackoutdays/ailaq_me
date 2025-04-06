@@ -20,3 +20,4 @@ pillow
 nest_asyncio
 whitenoise
 requests
+drf-extra-fields
