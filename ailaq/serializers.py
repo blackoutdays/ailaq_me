@@ -397,8 +397,14 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
         fields = ['profile_id', 'full_name', 'age', 'qualification', 'experience_years', 'country', 'city', 'about_me', 'profile_picture_url']
 
     def get_full_name(self, obj):
-        parts = [obj.last_name_ru, obj.first_name_ru, obj.middle_name_ru]
-        return " ".join(part for part in parts if part)
+        if obj.application:
+            parts = [
+                obj.application.last_name_ru,
+                obj.application.first_name_ru,
+                obj.application.middle_name_ru
+            ]
+            return " ".join(part for part in parts if part)
+        return ""
 
     def get_age(self, obj):
         """Вычисляет возраст психолога по дате рождения (если есть)"""
@@ -676,7 +682,11 @@ class UserIdSerializer(serializers.ModelSerializer):
         fields = ['id', 'telegram_id', 'full_name', 'is_psychologist']
 
     def get_full_name(self, obj):
-        parts = [obj.last_name_ru, obj.first_name_ru, obj.middle_name_ru]
+        parts = [
+            getattr(obj, 'last_name_ru', None),
+            getattr(obj, 'first_name_ru', None),
+            getattr(obj, 'middle_name_ru', None)
+        ]
         return " ".join(part for part in parts if part)
 
 #admin
