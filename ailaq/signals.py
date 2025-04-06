@@ -44,7 +44,11 @@ def handle_application_status_change(sender, instance, **kwargs):
         user.save(update_fields=["is_psychologist"])
         profile.is_verified = True
         profile.save(update_fields=["is_verified"])
-        message = "✅ Ваша заявка на роль психолога одобрена!"
+        message = (
+            "✅ Ваша заявка на роль психолога одобрена!\n\n"
+            "Теперь вы можете принимать клиентов и быть видимым в системе после покупки 3 заявок и получения отзывов."
+        )
+        logger.info(f"✅ Заявка психолога одобрена: user_id={user.id}")
     elif instance.status == 'REJECTED':
         user.is_psychologist = False
         user.save(update_fields=["is_psychologist"])
