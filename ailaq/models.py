@@ -28,7 +28,7 @@ class CustomUserManager(BaseUserManager):
         user = self.model(
             email=email,
             telegram_id=telegram_id,
-            is_active=is_active,  #  Теперь Telegram-пользователи активны сразу
+            is_active=is_active,
             **extra_fields
         )
 
@@ -36,8 +36,10 @@ class CustomUserManager(BaseUserManager):
             user.set_password(password)
         user.save(using=self._db)
 
-        # Если пользователь выбрал стать психологом, создаем заявку и профиль
         if wants_to_be_psychologist:
+            user.wants_to_be_psychologist = True
+            user.save(update_fields=["wants_to_be_psychologist"])
+
             psychologist_application = PsychologistApplication.objects.create(user=user, status="PENDING")
             PsychologistProfile.objects.create(user=user, application=psychologist_application)
 
