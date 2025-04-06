@@ -110,10 +110,8 @@ class CustomUser(AbstractBaseUser):
 
     @property
     def role(self):
-        """Возвращает роль пользователя"""
-        if self.wants_to_be_psychologist:
-            return 'PSYCHOLOGIST'
-        return 'CLIENT'
+        """Возвращает роль пользователя (психолог или клиент)"""
+        return 'PSYCHOLOGIST' if self.wants_to_be_psychologist else 'CLIENT'
 
     def has_perm(self, perm, obj=None):
         return self.is_superuser

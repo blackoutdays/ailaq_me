@@ -1,6 +1,5 @@
 import hmac
 import uuid
-from drf_spectacular import openapi
 from hashlib import sha256
 from rest_framework import generics
 from rest_framework.decorators import action
@@ -122,7 +121,6 @@ class TelegramAuthView(APIView):
         if user.wants_to_be_psychologist:
             application, _ = PsychologistApplication.objects.get_or_create(user=user)
 
-            # ✅ Проверка по user, а не по user+application (чтобы избежать IntegrityError)
             if not PsychologistProfile.objects.filter(user=user).exists():
                 PsychologistProfile.objects.create(user=user, application=application)
 
@@ -1255,6 +1253,9 @@ class UploadProfilePhotoView(APIView):
             "profile_picture_url": profile.profile_picture.url
         }, status=status.HTTP_200_OK)
 
+
+
+
 class PsychologistApplicationViewSet(viewsets.ModelViewSet):
     queryset = PsychologistApplication.objects.all()
     serializer_class = PsychologistApplicationSerializer
@@ -1301,7 +1302,13 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
 
             # Создание профиля при одобрении
             if new_status == 'APPROVED':
-                PsychologistProfile.objects.get_or_create(user=user, application=application)
+                # Получаем профиль или создаем, если его нет
+                profile, _ = PsychologistProfile.objects.get_or_create(user=user)
+
+                # Обновляем заявку в профиле, если она ещё не привязана или изменилась
+                if profile.application != application:
+                    profile.application = application
+                    profile.save(update_fields=["application"])
 
             # Telegram уведомление
             from asgiref.sync import async_to_sync
@@ -1357,22 +1364,25 @@ class AdminApprovePsychologistView(APIView):
 
     def post(self, request, psychologist_id, status):
         try:
-            # Получаем заявку на психолога по id
             application = PsychologistApplication.objects.get(user_id=psychologist_id)
+            user = application.user
+
+            if status not in ["APPROVED", "REJECTED"]:
+                return Response({"detail": "Неверный статус."}, status=status.HTTP_400_BAD_REQUEST)
+
+            application.status = status
+            application.save()
+
+            # Профиль и привязка заявки
+            profile, _ = PsychologistProfile.objects.get_or_create(user=user)
+            if profile.application != application:
+                profile.application = application
+                profile.save(update_fields=["application"])
+
+            return Response({"detail": f"Статус заявки обновлён на {status}."}, status=status.HTTP_200_OK)
+
         except PsychologistApplication.DoesNotExist:
-            return Response({"detail": "Заявка психолога не найдена."}, status=status.HTTP_404_NOT_FOUND)
-
-        # Проверяем, что статус правильный
-        if status not in ["APPROVED", "REJECTED"]:
-            return Response({"detail": "Неверный статус."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Обновляем статус заявки
-        application.status = status
-        application.save()
-
-        # Если статус "APPROVED", создаем профиль для психолога
-        if status == "APPROVED":
-            PsychologistProfile.objects.get_or_create(user=application.user, application=application)
-
-        # Возвращаем успешный ответ
-        return Response({"detail": f"Статус заявки обновлен на {status}."}, status=status.HTTP_200_OK)
+            return Response({"detail": "Заявка не найдена."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Ошибка при одобрении/отклонении: {str(e)}")
+            return Response({"detail": "Ошибка сервера."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
