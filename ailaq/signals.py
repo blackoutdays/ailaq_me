@@ -27,49 +27,38 @@ def handle_custom_user_post_save(sender, instance, created, **kwargs):
         PsychologistApplication.objects.get_or_create(user=instance)
         PsychologistProfile.objects.get_or_create(user=instance)
         logger.info(f"🧠 Созданы заявка и профиль для психолога {instance.id}")
-
 @receiver(post_save, sender=PsychologistApplication)
 def handle_application_status_change(sender, instance, **kwargs):
-    """ Обновляет статус пользователя и профиля, когда заявка психолога одобрена или отклонена """
     user = instance.user
-    profile, _ = PsychologistProfile.objects.get_or_create(user=user)
-    telegram_id = user.telegram_id
+    profile = PsychologistProfile.objects.filter(user=user).first()
 
-    if not telegram_id:
-        logger.warning(f"🚫 Нет Telegram ID для user_id={user.id}, не удалось отправить уведомление.")
+    if not profile:
+        logger.warning(f"⚠️ Нет профиля для user_id={user.id} — должно быть создано при регистрации.")
         return
+
+    if profile.application != instance:
+        profile.application = instance
+        profile.save(update_fields=["application"])
 
     if instance.status == 'APPROVED':
         user.is_psychologist = True
         user.save(update_fields=["is_psychologist"])
-
         profile.is_verified = True
         profile.save(update_fields=["is_verified"])
-
-        message = (
-            "✅ Ваша заявка на роль психолога одобрена!\n\n"
-            "Теперь вы можете принимать клиентов и быть видимым в системе после покупки 3 заявок и получения отзывов."
-        )
-        logger.info(f"✅ Заявка психолога одобрена: user_id={user.id}")
+        message = "✅ Ваша заявка на роль психолога одобрена!"
     elif instance.status == 'REJECTED':
         user.is_psychologist = False
         user.save(update_fields=["is_psychologist"])
-
         profile.is_verified = False
         profile.save(update_fields=["is_verified"])
-
-        message = (
-            "❌ К сожалению, ваша заявка на роль психолога была отклонена.\n"
-            "Если хотите узнать причину — свяжитесь с поддержкой."
-        )
-        logger.info(f"❌ Заявка психолога отклонена: user_id={user.id}")
+        message = "❌ Ваша заявка отклонена. Свяжитесь с поддержкой."
     else:
         return
 
-    try:
-        send_telegram_message_sync(
-            telegram_id=telegram_id,
-            text=message
-        )
-    except Exception as e:
-        logger.error(f"Ошибка при отправке Telegram-сообщения: {e}")
+    if user.telegram_id:
+        try:
+            send_telegram_message_sync(user.telegram_id, message)
+        except Exception as e:
+            logger.error(f"Ошибка при отправке в Telegram: {e}")
+    else:
+        logger.warning(f"🚫 Нет Telegram ID для user_id={user.id}")

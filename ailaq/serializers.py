@@ -20,6 +20,51 @@ from config import settings
 User = get_user_model()
 CustomUser = get_user_model()
 
+class TelegramAuthSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    first_name = serializers.CharField(required=False)
+    username = serializers.CharField(required=False)
+    auth_date = serializers.IntegerField()
+    hash = serializers.CharField()
+
+    def validate(self, data):
+        """ Проверяем Telegram авторизацию """
+        token = settings.TELEGRAM_BOT_TOKEN
+        auth_data = {key: value for key, value in data.items() if key != 'hash'}
+        check_string = "\n".join([f"{k}={v}" for k, v in sorted(auth_data.items())])
+        secret_key = sha256(token.encode()).digest()
+        expected_hash = hmac.new(secret_key, check_string.encode(), sha256).hexdigest()
+
+        if data['hash'] != expected_hash:
+            raise serializers.ValidationError("Неверные данные Telegram.")
+
+        if time.time() - int(data['auth_date']) > 86400:
+            raise serializers.ValidationError("Время авторизации истекло.")
+
+        return data
+
+    def create_or_update_user(self, validated_data):
+        """Создание или обновление пользователя — без логики wants_to_be_psychologist"""
+        telegram_id = validated_data['id']
+        username = validated_data.get('username', f"user_{telegram_id}")
+        first_name = validated_data.get('first_name', "")
+
+        user, created = CustomUser.objects.get_or_create(
+            telegram_id=telegram_id,
+            defaults={
+                'email': f"{telegram_id}@telegram.local",
+                'username': username,
+                'is_active': True
+            }
+        )
+
+        if not created:
+            user.username = username
+            user.first_name = first_name
+            user.save()
+
+        return user
+
 class CustomUserCreationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, min_length=8)
     password_confirm = serializers.CharField(write_only=True, required=True)
@@ -614,57 +659,6 @@ class QualificationSerializer(serializers.ModelSerializer):
             'experience_years', 'academic_degree', 'education',
             'office_photo', 'education_files', 'file_signature'
         ]
-
-class TelegramAuthSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    first_name = serializers.CharField(required=False)
-    username = serializers.CharField(required=False)
-    auth_date = serializers.IntegerField()
-    hash = serializers.CharField()
-
-    def validate(self, data):
-        """ Проверяем Telegram авторизацию """
-        token = settings.TELEGRAM_BOT_TOKEN
-        auth_data = {key: value for key, value in data.items() if key != 'hash'}
-        check_string = "\n".join([f"{k}={v}" for k, v in sorted(auth_data.items())])
-        secret_key = sha256(token.encode()).digest()
-        expected_hash = hmac.new(secret_key, check_string.encode(), sha256).hexdigest()
-
-        if data['hash'] != expected_hash:
-            raise serializers.ValidationError("Неверные данные Telegram.")
-
-        if time.time() - int(data['auth_date']) > 86400:
-            raise serializers.ValidationError("Время авторизации истекло.")
-
-        return data
-
-    def create_or_update_user(self, validated_data):
-        telegram_id = validated_data['id']
-        username = validated_data.get('username', f"user_{telegram_id}")
-        first_name = validated_data.get('first_name', "")
-        wants_to_be_psychologist = self.context['request'].data.get('wants_to_be_psychologist', False)
-
-        user, created = CustomUser.objects.get_or_create(
-            telegram_id=telegram_id,
-            defaults={
-                'email': f"{telegram_id}@telegram.local",
-                'username': username,
-                'wants_to_be_psychologist': wants_to_be_psychologist,
-                'is_active': True
-            }
-        )
-
-        if not created:
-            user.username = username
-            user.first_name = first_name
-            user.save()
-
-        # создаём заявку и профиль, если он хочет быть психологом
-        if wants_to_be_psychologist and not hasattr(user, 'psychologist_application'):
-            application = PsychologistApplication.objects.create(user=user, status="PENDING")
-            PsychologistProfile.objects.create(user=user, application=application)
-
-        return user
 
 class UserIdSerializer(serializers.ModelSerializer):
     class Meta:

@@ -58,7 +58,6 @@ class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
 
-
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def post(self, request):
@@ -80,36 +79,14 @@ class TelegramAuthView(APIView):
 
         telegram_id = int(auth_data['id'])
         username = auth_data.get('username', f"tg_{telegram_id}")
+
+        # ⚠️ Берем только при первом входе (ниже проверим)
         wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
         user = User.objects.filter(telegram_id=telegram_id).first()
 
+        # 🔹 Новый пользователь — регистрация
         if not user:
-            # Привязка через client_token
-            client_token = request.COOKIES.get('client_token')
-            if client_token:
-                consultation = QuickClientConsultationRequest.objects.filter(client_token=client_token).first()
-                if consultation:
-                    user = User.objects.filter(email=consultation.email).first()
-                    if user:
-                        user.telegram_id = telegram_id
-                        user.save()
-                        consultation.telegram_id = telegram_id
-                        consultation.save()
-
-        if user:
-            updated = False
-            if user.username != username:
-                user.username = username
-                updated = True
-            if not user.is_active:
-                user.is_active = True
-                updated = True
-            if updated:
-                user.save()
-
-        else:
-            # Новый пользователь: только сейчас можно установить wants_to_be_psychologist
             user = User.objects.create(
                 username=username,
                 telegram_id=telegram_id,
@@ -117,20 +94,30 @@ class TelegramAuthView(APIView):
                 wants_to_be_psychologist=wants_to_be_psychologist,
             )
 
-        # 👇 Безопасное создание профилей
-        if user.wants_to_be_psychologist:
-            application, _ = PsychologistApplication.objects.get_or_create(user=user)
-
-            if not PsychologistProfile.objects.filter(user=user).exists():
+            # создаем заявку и профиль если хочет быть психологом
+            if wants_to_be_psychologist:
+                application = PsychologistApplication.objects.create(user=user, status="PENDING")
                 PsychologistProfile.objects.create(user=user, application=application)
+            else:
+                ClientProfile.objects.create(user=user)
 
+        # 🔹 Уже зарегистрирован — просто обновляем имя или активность
         else:
-            ClientProfile.objects.get_or_create(user=user)
+            updated = False
+            if user.username != username:
+                user.username = username
+                updated = True
+            if not user.is_active:
+                user.is_active = True
+                updated = True
+
+            if updated:
+                user.save()
 
         # Токены
         refresh = RefreshToken.for_user(user)
 
-        from asgiref.sync import async_to_sync
+        # Telegram приветствие
         try:
             async_to_sync(send_telegram_message)(
                 telegram_id=telegram_id,
