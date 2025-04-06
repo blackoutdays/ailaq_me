@@ -58,12 +58,15 @@ bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
-    def post(self, request):
-        print(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.data}")
+    permission_classes = [AllowAny]
 
-        # 1. Проверка подписи (hash)
+    def post(self, request):
+        logger.info(f"ПРИШЕЛ ЗАПРОС ОТ TELEGRAM: {request.data}")
+
+        # 1. Проверка подписи
         received_hash = request.data.get('hash')
         telegram_fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date']
         auth_data = {k: request.data[k] for k in telegram_fields if k in request.data}
@@ -78,18 +81,18 @@ class TelegramAuthView(APIView):
         if not hmac.compare_digest(calculated_hash, received_hash):
             return Response({"error": "Неверная подпись"}, status=400)
 
-        # 2. Основные данные
+        # 2. Данные
         telegram_id = int(auth_data['id'])
         username = auth_data.get('username', f"tg_{telegram_id}")
         wants_to_be_psychologist = str(request.data.get("wants_to_be_psychologist", "false")).lower() == "true"
 
         user = User.objects.filter(telegram_id=telegram_id).first()
 
+        # 3. Новый пользователь
         if not user:
-            # Новый пользователь
             user = User.objects.create(
-                username=username,
                 telegram_id=telegram_id,
+                username=username,
                 is_active=True,
                 wants_to_be_psychologist=wants_to_be_psychologist
             )
@@ -105,7 +108,7 @@ class TelegramAuthView(APIView):
                 logger.error(f"Ошибка при создании заявки/профиля: {e}")
 
         else:
-            #  Повторный вход — просто обновим имя и статус активности
+            # 4. Повторный вход
             updated = False
             if user.username != username:
                 user.username = username
@@ -116,17 +119,17 @@ class TelegramAuthView(APIView):
             if updated:
                 user.save()
 
-        # 3. Генерация токенов
+        # 5. Генерация токенов
         refresh = RefreshToken.for_user(user)
 
-        # 4. Приветствие
+        # 6. Приветствие
         try:
             async_to_sync(send_telegram_message)(
                 telegram_id=telegram_id,
                 text="🎉 Вы успешно вошли в систему через Telegram. Добро пожаловать!"
             )
         except Exception as e:
-            logger.error(f"Ошибка при отправке Telegram-сообщения: {e}")
+            logger.error(f"Ошибка при отправке сообщения в Telegram: {e}")
 
         return Response({
             "access_token": str(refresh.access_token),
