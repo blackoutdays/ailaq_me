@@ -110,6 +110,11 @@ class CustomUser(AbstractBaseUser):
     def __str__(self):
         return self.email or f"Telegram User {self.telegram_id}"
 
+    def get_full_name(self):
+        if hasattr(self, "psychologist_profile") and getattr(self, "psychologist_profile", None):
+            return getattr(self.psychologist_profile, "get_full_name", "Психолог") or "Психолог"
+        return self.username or self.email or f"Telegram User {self.telegram_id}"
+
     @property
     def role(self):
         """Возвращает роль пользователя (психолог или клиент)"""
@@ -440,14 +445,12 @@ class PsychologistProfile(models.Model):
         except PsychologistApplication.DoesNotExist:
             logger.error(f"Application with ID {application_id} not found.")
 
-    @property
     def get_full_name(self):
-        """Возвращает полное имя психолога: фамилия, имя, отчество"""
         if not self.application:
             return 'Неизвестно'
-        first_name = self.application.first_name_ru or 'Неизвестно'
-        last_name = self.application.last_name_ru or 'Неизвестно'
-        middle_name = self.application.middle_name_ru or 'Неизвестно'
+        first_name = self.application.first_name_ru or ''
+        last_name = self.application.last_name_ru or ''
+        middle_name = self.application.middle_name_ru or ''
         return f"{last_name} {first_name} {middle_name}".strip()
 
     def get_average_rating(self) -> float:
