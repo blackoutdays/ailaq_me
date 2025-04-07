@@ -112,7 +112,7 @@ class CustomUser(AbstractBaseUser):
 
     def get_full_name(self):
         if hasattr(self, "psychologist_profile") and getattr(self, "psychologist_profile", None):
-            return getattr(self.psychologist_profile, "get_full_name", "Психолог") or "Психолог"
+            return self.psychologist_profile.get_full_name()
         return self.username or self.email or f"Telegram User {self.telegram_id}"
 
     @property
