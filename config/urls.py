@@ -11,16 +11,13 @@ from ailaq.views import (
     ReviewListView, TelegramAuthView, CatalogViewSet, ServicePriceView,
     PublicPsychologistProfileView,PsychologistApplicationViewSet,
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
-    QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView,
-    TelegramAuthLinkConsultationAPIView, ServicePriceSessionDetailView,
+    QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView, ServicePriceSessionDetailView,
     AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView, UploadProfilePhotoView,
     LoginView, RegisterUserView, ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
     PsychologistChangePasswordView
-
 )
 from django.urls import path
 from ailaq.views import UserListView
-
 
 router = DefaultRouter()
 router.register(r'psychologist-applications', PsychologistApplicationViewSet, basename='psychologist-application')
@@ -91,7 +88,6 @@ urlpatterns = [
     #  Запись на быструю консультацию (только для зарегистрированных клиентов)
     path("api/quick-consultation/", QuickClientConsultationAPIView.as_view(), name="quick_consultation"),
     path('api/quick-consultation-anonymous/', QuickClientConsultationAnonymousAPIView.as_view()),
-    path('api/auth/telegram/link-consultation/', TelegramAuthLinkConsultationAPIView.as_view()),
 
     # Запись на консультацию к выбранному психологу
     path('api/session-request/authenticated/', AuthenticatedPsychologistSessionRequestView.as_view(), name='session-authenticated'),

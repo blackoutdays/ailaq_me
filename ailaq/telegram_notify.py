@@ -58,3 +58,31 @@ async def notify_all_psychologists(consultation):
             logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
         except Exception as e:
             logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+
+def notify_client_about_request_sent(telegram_id):
+    try:
+        bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+        bot.send_message(
+            chat_id=telegram_id,
+            text=(
+                "✅ Ваша заявка отправлена психологам!\n"
+                "Скоро один из них примет её и свяжется с вами в Telegram. Ожидайте сообщения."
+            ),
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при уведомлении клиента {telegram_id}: {e}")
+
+def notify_client_about_direct_request(telegram_id, psychologist_name):
+    try:
+        bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+        bot.send_message(
+            chat_id=telegram_id,
+            text=(
+                f"📩 Ваша заявка отправлена психологу *{psychologist_name}*.\n"
+                "Он получит уведомление и скоро свяжется с вами в Telegram."
+            ),
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при уведомлении клиента о заявке к психологу {telegram_id}: {e}")

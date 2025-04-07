@@ -51,6 +51,7 @@ import logging
 from .telegram_bot import send_telegram_message, notify_psychologist_telegram
 from .models import PsychologistSessionRequest
 from .serializers import AnonymousSessionRequestSerializer, AuthenticatedSessionRequestSerializer
+from .telegram_notify import notify_client_about_request_sent, notify_client_about_direct_request
 
 logger = logging.getLogger("telegram_auth")
 User = get_user_model()
@@ -59,6 +60,7 @@ bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 class TelegramAuthPageView(View):
     def get(self, request):
         return render(request, 'telegram_auth.html', {})
+
 @method_decorator(csrf_exempt, name='dispatch')
 class TelegramAuthView(APIView):
     def post(self, request):
@@ -176,6 +178,7 @@ class QuickClientConsultationAPIView(APIView):
         )
 
         notify_all_psychologists_task.delay(consultation.id)
+        notify_client_about_request_sent(user.telegram_id)
 
         response_serializer = QuickClientConsultationRequestSerializer(consultation)
         return Response({
@@ -184,36 +187,47 @@ class QuickClientConsultationAPIView(APIView):
         }, status=201)
 
 class QuickClientConsultationAnonymousAPIView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=["Клиент - консультация"],
-        summary="Быстрая консультация для незарегистрированных клиентов)",
+        summary="Быстрая консультация (Telegram WebApp — клиент вводит имя, возраст, пол)",
         request=QuickClientConsultationAnonymousSerializer,
-        responses={201: QuickClientConsultationAnonymousSerializer},
+        responses={201: QuickClientConsultationRequestSerializer},
     )
     def post(self, request):
+        user = request.user
+
+        if not user.telegram_id:
+            return Response({"error": "Привяжите Telegram через Web View перед записью."}, status=400)
+
         serializer = QuickClientConsultationAnonymousSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        consultation = serializer.save()
+        validated_data = serializer.validated_data
 
-        token = uuid.uuid4().hex
-        consultation.client_token = token
-        consultation.save()
+        # Обновим или создадим профиль клиента
+        profile, _ = ClientProfile.objects.get_or_create(user=user)
+
+        # Сохраняем введённые данные в профиль
+        profile.full_name = validated_data.get("client_name")
+        profile.age = validated_data.get("age")
+        profile.gender = validated_data.get("gender")
+        profile.save()
+
+        # Создание заявки
+        consultation = QuickClientConsultationRequest.objects.create(
+            **validated_data,
+            telegram_id=user.telegram_id
+        )
 
         notify_all_psychologists_task.delay(consultation.id)
-        response_data = serializer.data
-        response_data['client_token'] = token
+        notify_client_about_request_sent(user.telegram_id)
 
-        response = Response({
+        response_serializer = QuickClientConsultationRequestSerializer(consultation)
+        return Response({
             "message": "Заявка успешно создана.",
-            "consultation_request": response_data
+            "consultation_request": response_serializer.data
         }, status=status.HTTP_201_CREATED)
-
-        # Сохранение токен в cookie (опционально)
-        response.set_cookie("client_token", token, httponly=True, max_age=86400)
-
-        return response
 
 class AuthenticatedPsychologistSessionRequestView(APIView):
     permission_classes = [IsAuthenticated]
@@ -250,87 +264,47 @@ class AuthenticatedPsychologistSessionRequestView(APIView):
         )
 
         async_to_sync(notify_psychologist_telegram)(session_request)
+        notify_client_about_direct_request(user.telegram_id, session_request.psychologist.user.get_full_name())
+
         return Response(serializer.data, status=201)
 
 class AnonymousPsychologistSessionRequestView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=["Клиент - консультация"],
-        summary="Заявка к выбранному психологу (без регистрации)",
+        summary="Заявка к выбранному психологу (Telegram WebApp — клиент вводит имя, возраст, пол)",
         request=AnonymousSessionRequestSerializer,
-        responses={201: AnonymousSessionRequestSerializer}
+        responses={201: AnonymousSessionRequestSerializer},
     )
     def post(self, request):
+        user = request.user
+
+        if not user.telegram_id:
+            return Response({"error": "Привяжите Telegram через Web View перед записью."}, status=400)
+
         serializer = AnonymousSessionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        session_request = serializer.save()
+        validated_data = serializer.validated_data
 
-        # Генерация токена и установка в куки
-        token = uuid.uuid4().hex
-        session_request.client_token = token
-        session_request.save()
+        # Обновим или создадим профиль клиента
+        profile, _ = ClientProfile.objects.get_or_create(user=user)
+        profile.full_name = validated_data.get("client_name")
+        profile.age = validated_data.get("age")
+        profile.gender = validated_data.get("gender")
+        profile.save()
+
+        # Создание заявки
+        session_request = PsychologistSessionRequest.objects.create(
+            **validated_data,
+            client=profile,
+            telegram_id=user.telegram_id
+        )
 
         async_to_sync(notify_psychologist_telegram)(session_request)
-        response_data = serializer.data
-        response_data['client_token'] = token
-        response = Response(response_data, status=201)
-        response.set_cookie("client_token", token, httponly=True, max_age=86400)
-        return response
+        notify_client_about_direct_request(user.telegram_id, session_request.psychologist.user.get_full_name())
 
-class TelegramAuthLinkConsultationAPIView(APIView):
-    permission_classes = [AllowAny]
-
-    @extend_schema(
-        tags=["Клиент - Telegram привязка"],
-        summary="Привязка Telegram к уже созданной заявке",
-        request=TelegramAuthSerializer,
-        responses={200: OpenApiTypes.OBJECT}
-    )
-    def get(self, request):
-        auth_data = request.query_params.dict()
-        received_hash = auth_data.pop('hash', None)
-
-        if not received_hash:
-            return Response({"error": "Нет hash"}, status=400)
-
-        auth_data_str = "\n".join(f"{k}={v}" for k, v in sorted(auth_data.items()))
-        secret_key = sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
-        calculated_hash = hmac.new(secret_key, auth_data_str.encode(), sha256).hexdigest()
-
-        if not hmac.compare_digest(calculated_hash, received_hash):
-            return Response({"error": "Неверная подпись"}, status=400)
-
-        telegram_id = int(auth_data['id'])
-
-        # Получаем токен из cookie
-        client_token = request.COOKIES.get('client_token')
-
-        if not client_token:
-            return Response({"error": "Токен клиента не найден."}, status=400)
-
-        try:
-            consultation = QuickClientConsultationRequest.objects.get(client_token=client_token)
-        except QuickClientConsultationRequest.DoesNotExist:
-            return Response({"error": "Заявка с таким токеном не найдена."}, status=404)
-
-        # Создаем пользователя
-        user, created = CustomUser.objects.get_or_create(
-            telegram_id=telegram_id,
-            defaults={
-                'email': f"{telegram_id}@telegram.local",
-                'is_active': True,
-                'username': auth_data.get('username', f"user_{telegram_id}"),
-            }
-        )
-        # Привязываем Telegram к заявке
-        consultation.telegram_id = telegram_id
-        consultation.save()
-
-        return Response({
-            'message': "Telegram успешно привязан к заявке.",
-            'consultation_id': consultation.id
-        })
+        return Response(serializer.data, status=201)
 
 class CatalogPagination(PageNumberPagination):
     page_size = 10
@@ -459,7 +433,10 @@ class PublicPsychologistProfileView(APIView):
         responses={200: PsychologistProfileSerializer}
     )
     def get(self, request, psychologist_id: int):
-        psychologist = get_object_or_404(PsychologistProfile, user_id=psychologist_id)
+        psychologist = get_object_or_404(
+            PsychologistProfile.objects.select_related("application"),
+            user_id=psychologist_id
+        )
         serializer = PsychologistProfileSerializer(psychologist)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -478,9 +455,7 @@ class PublicQualificationView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class PublicServicePriceView(APIView):
-    """
-    🔹 Позволяет всем пользователям видеть стоимость услуг психолога.
-    """
+    """ Позволяет всем пользователям видеть стоимость услуг психолога """
     permission_classes = [AllowAny]
 
     @extend_schema(
