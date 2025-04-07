@@ -679,6 +679,8 @@ class PsychologistSessionRequest(models.Model):
         related_name='taken_requests',
         verbose_name="Принята психологом"
     )
+    review_requested = models.BooleanField(default=False)
+    review_submitted = models.BooleanField(default=False)
     created_at = models.DateTimeField("Создано", auto_now_add=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='PENDING')
 

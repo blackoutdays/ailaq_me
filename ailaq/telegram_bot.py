@@ -75,7 +75,8 @@ async def handle_status_update_callback(update, context):
             status_message = "\u274c Вы отметили, что не удалось связаться с клиентом."
         elif action == "complete":
             session.status = "COMPLETED"
-            status_message = "\u2705 Сессия завершена. Спасибо! Клиенту будет предложено оставить отзыв."
+            status_message = "✅ Сессия завершена. Спасибо! Клиенту будет предложено оставить отзыв."
+            await notify_client_to_leave_review(session)
         elif action == "not_completed":
             session.status = "NOT_COMPLETED"
             status_message = "\u274c Вы отметили, что сессия не состоялась."
@@ -156,15 +157,14 @@ async def handle_accept_callback(update, context):
             reply_markup=build_status_update_keyboard(session.id)
         )
 
-        # 🔔 Уведомление клиенту
         await send_telegram_message(
             session.telegram_id,
-            "🤝 Вашу заявку принял психолог. Сессия скоро начнётся. После неё я попрошу вас оставить отзыв 🙏"
+            "Вашу заявку принял психолог. Сессия скоро начнётся. После неё я попрошу вас оставить отзыв 🙏"
         )
 
     except Exception as e:
-        logging.error(f"❌ Ошибка в callback accept_session: {e}")
-        await query.message.reply_text("⚠️ Ошибка при принятии заявки")
+        logging.error(f"Ошибка в callback accept_session: {e}")
+        await query.message.reply_text("Ошибка при принятии заявки")
 
 def send_telegram_message_sync(telegram_id, text):
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -201,7 +201,7 @@ async def get_client_profile(telegram_id):
 
 async def send_welcome_message(telegram_id):
     """Бот отправляет приветственное сообщение, когда получает Telegram ID"""
-    await bot.send_message(telegram_id, "👋 Привет! Теперь я могу писать вам первым.")
+    await bot.send_message(telegram_id, "Привет! Теперь я могу писать вам первым.")
 
 async def link_telegram_user(update, context):
     telegram_id = update.effective_chat.id
@@ -210,7 +210,7 @@ async def link_telegram_user(update, context):
     user = await sync_to_async(User.objects.filter(telegram_id=telegram_id).first)()
 
     if user:
-        await update.message.reply_text("✅ Вы уже привязаны к системе.")
+        await update.message.reply_text("Вы уже привязаны к системе.")
     else:
         await update.message.reply_text(
             "👤 Мы не нашли вас в системе.\n"
