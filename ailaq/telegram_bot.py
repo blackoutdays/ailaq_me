@@ -90,7 +90,6 @@ async def handle_status_update_callback(update, context):
         logging.error(f"Ошибка обработки статуса: {e}")
         await query.edit_message_text("\u2757 Ошибка обработки действия. Попробуйте позже.")
 
-
 async def handle_accept_callback(update, context):
     query = update.callback_query
     await query.answer()
@@ -103,6 +102,7 @@ async def handle_accept_callback(update, context):
     try:
         session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(id=session_id)
 
+        # Уже принято
         if session.taken_by:
             await bot.edit_message_reply_markup(
                 chat_id=query.message.chat_id,
@@ -115,10 +115,12 @@ async def handle_accept_callback(update, context):
             )
             return
 
+        # Принять заявку
         session.taken_by = session.psychologist
         session.status = "CONTACTED"
         await sync_to_async(session.save)()
 
+        # Обновить текст и скрыть кнопки
         new_text = query.message.text + "\n\n🎉 Заявка принята!"
         await bot.edit_message_text(
             chat_id=query.message.chat_id,
@@ -126,6 +128,8 @@ async def handle_accept_callback(update, context):
             text=new_text,
             parse_mode="Markdown"
         )
+
+        # Получить Telegram username клиента (если есть)
         session_user = await sync_to_async(User.objects.filter(telegram_id=session.telegram_id).first)()
         telegram_info = (
             f"🌐 Telegram: @{session_user.username}"
@@ -133,6 +137,7 @@ async def handle_accept_callback(update, context):
             else f"🌐 Telegram ID: {session.telegram_id}"
         )
 
+        # Отправка данных психологу
         await bot.send_message(
             chat_id=query.from_user.id,
             text=(
@@ -142,6 +147,19 @@ async def handle_accept_callback(update, context):
                 f"🧠 Тема: {session.topic}\n"
                 f"💬 {session.comments or 'нет'}"
             )
+        )
+
+        # ✅ Добавляем inline-клавиатуру для обновления статуса
+        await bot.send_message(
+            chat_id=query.from_user.id,
+            text="📋 Обновите статус заявки:",
+            reply_markup=build_status_update_keyboard(session.id)
+        )
+
+        # 🔔 Уведомление клиенту
+        await send_telegram_message(
+            session.telegram_id,
+            "🤝 Вашу заявку принял психолог. Сессия скоро начнётся. После неё я попрошу вас оставить отзыв 🙏"
         )
 
     except Exception as e:

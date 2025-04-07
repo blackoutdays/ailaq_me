@@ -651,16 +651,41 @@ class PsychologistSessionRequest(models.Model):
         ('CANCELED', 'Отменена'),
     ]
 
-    psychologist = models.ForeignKey('ailaq.PsychologistProfile', on_delete=models.CASCADE)
-    client_name = models.CharField(max_length=255)
-    age = models.PositiveIntegerField()
-    gender = models.CharField(max_length=10)
-    telegram_id = models.CharField(max_length=100)
-    topic = models.CharField(max_length=255)
-    comments = models.TextField(blank=True)
-    taken_by = models.ForeignKey("ailaq.PsychologistProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name='taken_requests')
-    created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    psychologist = models.ForeignKey(
+        'ailaq.PsychologistProfile',
+        on_delete=models.CASCADE,
+        related_name='session_requests_received',
+        verbose_name='Психолог'
+    )
+    client = models.ForeignKey(
+        'ailaq.ClientProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='session_requests',
+        verbose_name='Клиентский профиль'
+    )
+    client_name = models.CharField("Имя клиента", max_length=255)
+    age = models.PositiveIntegerField("Возраст")
+    gender = models.CharField("Пол", max_length=10)
+    telegram_id = models.CharField("Telegram ID", max_length=100)
+    topic = models.CharField("Тема запроса", max_length=255)
+    comments = models.TextField("Комментарий", blank=True)
+    taken_by = models.ForeignKey(
+        "ailaq.PsychologistProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='taken_requests',
+        verbose_name="Принята психологом"
+    )
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+    status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='PENDING')
+
+    class Meta:
+        verbose_name = "Заявка на сессию"
+        verbose_name_plural = "Заявки на сессию"
+        ordering = ['-created_at']
 
     def __str__(self):
         return f"Заявка от {self.client_name} ({self.get_status_display()})"
