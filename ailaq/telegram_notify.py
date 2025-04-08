@@ -40,12 +40,22 @@ async def get_approved_psychologists():
 async def notify_all_psychologists(consultation):
     approved_psychologists = await get_approved_psychologists()
 
+    # Check if preferred_psychologist_age_min and preferred_psychologist_age_max exist
+    preferred_min_age = getattr(consultation, 'preferred_psychologist_age_min', None)
+    preferred_max_age = getattr(consultation, 'preferred_psychologist_age_max', None)
+
+    # If either is None, use a default message
+    if preferred_min_age is not None and preferred_max_age is not None:
+        age_info = f"Возраст психолога: от {preferred_min_age} до {preferred_max_age}"
+    else:
+        age_info = "Возраст психолога не указан"
+
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
         f"Язык: {consultation.psychologist_language}\n"
         f"Пол клиента: {consultation.gender}, возраст: {consultation.age}\n"
         f"Предпочтения: психолог {consultation.psychologist_gender}, "
-        f"Возраст психолога: от {consultation.preferred_psychologist_min_age} до {consultation.preferred_psychologist_max_age}\n"
+        f"{age_info}\n"  # Use age_info instead of directly using the fields
         f"Тема: {consultation.topic}\n"
         f"Комментарий: {consultation.comments or 'нет'}\n\n"
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"

@@ -294,15 +294,23 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="Markdown"
         )
 
-        # Сенд данные клиента
+        # Получить Telegram username клиента (если есть)
+        session_user = await sync_to_async(User.objects.filter(telegram_id=session.telegram_id).first)()
+        telegram_info = (
+            f"🌐 Telegram: @{session_user.username}"
+            if session_user and session_user.username
+            else f"🌐 Telegram ID: {session.telegram_id}"
+        )
+
+        # Отправка данных психологу
         await bot.send_message(
             chat_id=query.from_user.id,
             text=(
                 f"📢 Вы приняли заявку!\n"
                 f"👤 Клиент: {session.client_name}\n"
-                f"🌐 Telegram: @{session.user.username}" if session.user and session.user.username else f"🌐 Telegram ID: {session.telegram_id}\n"
+                f"{telegram_info}\n"
                 f"🧠 Тема: {session.topic}\n"
-                f"💬 {session.comments or 'нет'}\n"
+                f"💬 {session.comments or 'нет'}"
             )
         )
 
@@ -448,7 +456,6 @@ async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
             consultation.telegram_id,
             "🤝 Вашу заявку принял психолог. Сессия скоро начнётся."
         )
-        # asyncio.get_event_loop().call_later(1800, lambda: asyncio.run(remind_review(consultation)))
 
     except Exception as e:
         await update.message.reply_text("⚠️ Ошибка принятия заявки. Возможно, она уже обработана.")
