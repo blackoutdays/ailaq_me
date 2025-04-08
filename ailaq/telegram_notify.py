@@ -4,6 +4,8 @@ import requests
 from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
+
+from ailaq.enums import LanguageEnum, ClientGenderEnum, ProblemEnum
 from ailaq.models import PsychologistProfile
 
 logger = logging.getLogger(__name__)
@@ -40,23 +42,26 @@ async def get_approved_psychologists():
 async def notify_all_psychologists(consultation):
     approved_psychologists = await get_approved_psychologists()
 
-    # Check if preferred_psychologist_age_min and preferred_psychologist_age_max exist
+    # Получаем язык клиента
+    language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
+
+    # Получаем пол клиента
+    gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender])
+
+    # Переводим тему с использованием ProblemEnum
+    topic = ', '.join([ProblemEnum[item].value if item in ProblemEnum.__members__ else item for item in consultation.topic])
+
+    # Проверяем возраст психолога
     preferred_min_age = getattr(consultation, 'preferred_psychologist_age_min', None)
     preferred_max_age = getattr(consultation, 'preferred_psychologist_age_max', None)
-
-    # If either is None, use a default message
-    if preferred_min_age is not None and preferred_max_age is not None:
-        age_info = f"Возраст психолога: от {preferred_min_age} до {preferred_max_age}"
-    else:
-        age_info = "Возраст психолога не указан"
+    age_info = f"Возраст психолога: от {preferred_min_age} до {preferred_max_age}" if preferred_min_age and preferred_max_age else "Возраст психолога не указан"
 
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
-        f"Язык: {consultation.psychologist_language}\n"
-        f"Пол клиента: {consultation.gender}, возраст: {consultation.age}\n"
-        f"Предпочтения: психолог {consultation.psychologist_gender}, "
-        f"{age_info}\n"  # Use age_info instead of directly using the fields
-        f"Тема: {consultation.topic}\n"
+        f"Язык: {language}\n"
+        f"Пол клиента: {gender}, возраст: {consultation.age}\n"
+        f"Предпочтения: психолог {consultation.psychologist_gender}, {age_info}\n"
+        f"Тема: {topic}\n"
         f"Комментарий: {consultation.comments or 'нет'}\n\n"
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
     )

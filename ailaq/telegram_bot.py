@@ -1,6 +1,8 @@
 import os
 import django
 
+from ailaq.enums import ClientGenderEnum, LanguageEnum, ProblemEnum
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
@@ -62,26 +64,26 @@ async def handle_status_update_callback(update, context):
         session = await sync_to_async(PsychologistSessionRequest.objects.get)(id=session_id)
 
         if session.psychologist.user.telegram_id != telegram_id:
-            await query.edit_message_text("\u26d4\ufe0f Вы не можете изменить статус этой заявки.")
+            await query.edit_message_text("⚠️ Вы не можете изменить статус этой заявки.")
             return
 
         status_message = ""
 
         if action == "contact":
             session.status = "CONTACTED"
-            status_message = "\ud83d\udcde Вы отметили, что связались с клиентом."
+            status_message = "📞 Вы отметили, что связались с клиентом."
         elif action == "not_contacted":
             session.status = "NOT_CONTACTED"
-            status_message = "\u274c Вы отметили, что не удалось связаться с клиентом."
+            status_message = "❌ Вы отметили, что не удалось связаться с клиентом."
         elif action == "complete":
             session.status = "COMPLETED"
             status_message = "✅ Сессия завершена. Спасибо! Клиенту будет предложено оставить отзыв."
             await notify_client_to_leave_review(session)
         elif action == "not_completed":
             session.status = "NOT_COMPLETED"
-            status_message = "\u274c Вы отметили, что сессия не состоялась."
+            status_message = "❌ Вы отметили, что сессия не состоялась."
         else:
-            await query.edit_message_text("\u26a0\ufe0f Неизвестное действие.")
+            await query.edit_message_text("⚠️ Неизвестное действие.")
             return
 
         await sync_to_async(session.save)()
@@ -226,25 +228,40 @@ async def send_telegram_message(telegram_id, text):
 
 async def notify_psychologist_telegram(session_request):
     try:
+        # Получаем данные сессии с психологом
         session_request = await sync_to_async(
             lambda: PsychologistSessionRequest.objects.select_related("psychologist__user").get(id=session_request.id)
         )()
 
+        # Получаем Telegram ID психолога
         telegram_id = session_request.psychologist.user.telegram_id
         if not telegram_id:
             return
+
+        # Преобразуем пол в читаемое значение
+        gender_display = ClientGenderEnum[session_request.gender].value  # Преобразуем в строку, например "Мужской" или "Женский"
+
+        # Преобразуем язык клиента в читаемое значение
+        language_display = LanguageEnum[session_request.language].value  # Преобразуем язык
+
+        # Преобразуем проблему клиента в читаемое значение
+        problem_display = ProblemEnum[session_request.topic].value  # Преобразуем тему
+
         text = (
             f"📥 Новая заявка от клиента!\n"
             f"👤 Имя: {session_request.client_name}\n"
-            f"🧠 Тема: {session_request.topic}\n"
-            f"📅 Возраст: {session_request.age}, Пол: {session_request.gender}\n"
-            f"💬 Комментарий: {session_request.comments or 'нет'}"
+            f"🧠 Тема: {problem_display}\n"  # Используем читаемое значение проблемы
+            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"  # Используем читаемое значение пола
+            f"💬 Комментарий: {session_request.comments or 'нет'}\n"
+            f"🗣️ Язык клиента: {language_display}"  # Отображаем язык
         )
 
+        # Кнопки для принятия заявки
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Принять", callback_data=f"accept_session_{session_request.id}")]
         ])
 
+        # Отправка сообщения психологу
         await bot.send_message(
             chat_id=telegram_id,
             text=text,
