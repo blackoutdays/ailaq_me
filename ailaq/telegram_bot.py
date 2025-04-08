@@ -40,12 +40,12 @@ pending_reviews = {}
 def build_status_update_keyboard(session_id):
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("\ud83d\udcde Связался", callback_data=f"contact_{session_id}"),
-            InlineKeyboardButton("\u274c Не удалось связаться", callback_data=f"not_contacted_{session_id}")
+            InlineKeyboardButton("📞 Связался", callback_data=f"contact_{session_id}"),
+            InlineKeyboardButton("❌ Не удалось связаться", callback_data=f"not_contacted_{session_id}")
         ],
         [
-            InlineKeyboardButton("\u2705 Сессия прошла", callback_data=f"complete_{session_id}"),
-            InlineKeyboardButton("\u274c Сессия не состоялась", callback_data=f"not_completed_{session_id}")
+            InlineKeyboardButton("✅ Сессия прошла", callback_data=f"complete_{session_id}"),
+            InlineKeyboardButton("❌ Сессия не состоялась", callback_data=f"not_completed_{session_id}")
         ]
     ])
 

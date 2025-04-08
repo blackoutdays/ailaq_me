@@ -47,10 +47,10 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     # # Регистрация и логин
-    # path('api/register/', RegisterUserView.as_view(), name='register'),
+    path('api/register/', RegisterUserView.as_view(), name='register'),
     path('api/login/', LoginView.as_view(), name='login'),
-    # path("api/confirm-email/<str:verification_code>/", ConfirmEmailView.as_view(), name="confirm-email"),
-    # path("api/resend-verification/", ResendVerificationEmailView.as_view(), name="resend-verification"),
+    path("api/confirm-email/<str:verification_code>/", ConfirmEmailView.as_view(), name="confirm-email"),
+    path("api/resend-verification/", ResendVerificationEmailView.as_view(), name="resend-verification"),
     # path("psychologists/change-password/", PsychologistChangePasswordView.as_view(), name="psychologist-change-password"),
 
     # Публичные эндпоинты для клиентов
