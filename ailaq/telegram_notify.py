@@ -45,7 +45,47 @@ async def notify_all_psychologists(consultation):
 
     # Получаем язык клиента (переводим каждый язык через перечисление)
     language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
+    gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
+        consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
 
+    # Преобразуем PROBLEMS_LIST в словарь
+    problems_dict = {
+        'aggression': 'Агрессия, ссоры и конфликты',
+        'pregnancy': 'Беременность и материнство',
+        'badHabits': 'Вредные привычки и зависимости',
+        'depression': 'Депрессия и стресс',
+        'lifeCrisis': 'Жизненные кризисы',
+        'choice': 'Затрудняюсь с выбором',
+        'isolation': 'Изоляция и социальная тревога',
+        'career': 'Карьера, финансы и планы на жизнь',
+        'identityCrisis': 'Кризисы идентичности и самовосприятия',
+        'development': 'Мое развитие и самоопределение',
+        'sleepDisorder': 'Нарушение сна и бессонница',
+        'unknownEmotions': 'Непонятные эмоции',
+        'lowSelfEsteem': 'Неуверенность в себе',
+        'panicAttacks': 'Панические атаки',
+        'relationshipBoundaries': 'Проблемы с границами в отношениях',
+        'procrastination': 'Прокрастинация и выгорание',
+        'psychosomatics': 'Психосоматика и физическое здоровье',
+        'eatingDisorder': 'Расстройство пищевого поведения',
+        'sexualRelationships': 'Сексуальные отношения',
+        'communication': 'Сложности в общении с людьми',
+        'relationships': 'Сложности в отношениях',
+        'selfRelationships': 'Сложности в отношениях с собой',
+        'family': 'Сложности в семье',
+        'adaptation': 'Сложности при адаптации к новым жизненным условиям',
+        'children': 'Сложности с детьми',
+        'selfEsteem': 'Сложности с самооценкой',
+        'fearOfChange': 'Страх перед переменами или новым опытом',
+        'anxiety': 'Тревога и страхи',
+        'loss': 'Утрата близкого человека',
+        'guilt': 'Чувство вины или стыда',
+        'loneliness': 'Чувство одиночества',
+        'other': 'Другая проблема'
+    }
+
+    # Переводим тему с использованием problems_dict
+    topic = ', '.join([problems_dict.get(item, item) for item in consultation.topic])
     # Получаем пол психолога (аналогично полю клиента)
     psychologist_gender = ', '.join(
         [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]
@@ -57,12 +97,6 @@ async def notify_all_psychologists(consultation):
     psychologist_gender = ', '.join(
         [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
         consultation.psychologist_gender, list) else PsychologistGenderEnum[consultation.psychologist_gender].value
-
-    # Переводим тему с использованием ProblemEnum (обрабатываем каждый элемент, проверяя его на соответствие ключам в перечислении)
-    topic = ', '.join([
-        ProblemEnum[item.upper()].value if item.upper() in ProblemEnum.__members__ else item
-        for item in consultation.topic
-    ])
 
     # Проверяем возраст психолога
     preferred_min_age = getattr(consultation, 'preferred_psychologist_age_min', None)
