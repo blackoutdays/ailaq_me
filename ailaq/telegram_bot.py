@@ -179,19 +179,15 @@ def send_telegram_message_sync(telegram_id, text):
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения Telegram ID {telegram_id}: {e}")
 
-def matches_age(birth_date, preferred_age):
+def matches_age(birth_date, preferred_min, preferred_max):
     if not birth_date:
         return False
     age = (datetime.today().date() - birth_date).days // 365
-    if preferred_age == 'AGE_18_25':
-        return 18 <= age <= 25
-    elif preferred_age == 'AGE_26_35':
-        return 26 <= age <= 35
-    elif preferred_age == 'AGE_36_50':
-        return 36 <= age <= 50
-    elif preferred_age == 'AGE_50_PLUS':
-        return age > 50
-    return False
+    if preferred_min is not None and age < preferred_min:
+        return False
+    if preferred_max is not None and age > preferred_max:
+        return False
+    return True
 
 async def get_psychologist_profile(telegram_id):
     return await sync_to_async(PsychologistProfile.objects.get)(user__telegram_id=telegram_id)
@@ -421,8 +417,8 @@ async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
             app.status == 'APPROVED' and
             app.gender == consultation.psychologist_gender and
             app.communication_language == consultation.psychologist_language and
-            matches_age(app.birth_date, consultation.preferred_psychologist_age)
-        ):
+            matches_age(app.birth_date, consultation.preferred_psychologist_age_min,
+                        consultation.preferred_psychologist_age_max)):
             await update.message.reply_text("❌ Вы не подходите по критериям для этой заявки.")
             return
 

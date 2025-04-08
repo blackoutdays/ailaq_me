@@ -607,11 +607,8 @@ class QuickClientConsultationRequest(models.Model):
         choices=[(tag.name, tag.value) for tag in ClientGenderEnum],
         verbose_name="Пол клиента"
     )
-    preferred_psychologist_age = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="Возраст специалиста"
-    )
+    preferred_psychologist_age_min = models.PositiveIntegerField(null=True, blank=True)
+    preferred_psychologist_age_max = models.PositiveIntegerField(null=True, blank=True)
     psychologist_gender = models.JSONField(default=list, blank=True, null=True, verbose_name="Пол специалиста")
     psychologist_language = models.JSONField(default=list, blank=True, null=True, verbose_name="Язык общения")
     topic = models.JSONField(default=list, blank=True, null=True, verbose_name="Тема")
