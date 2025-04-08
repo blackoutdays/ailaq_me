@@ -302,7 +302,7 @@ class AnonymousPsychologistSessionRequestView(APIView):
         )
 
         async_to_sync(notify_psychologist_telegram)(session_request)
-        notify_client_about_direct_request(user.telegram_id, session_request.psychologist.user.get_full_name())
+        notify_client_about_direct_request(user.telegram_id, session_request.psychologist.user.full_name)
 
         return Response(serializer.data, status=201)
 
