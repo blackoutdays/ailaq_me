@@ -238,7 +238,17 @@ class ClientProfileSerializer(serializers.ModelSerializer):
 
         return super().update(instance, validated_data)
 
-class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
+class NormalizeListFieldsMixin:
+    list_fields_to_normalize = []
+
+    def to_internal_value(self, data):
+        for field in self.list_fields_to_normalize:
+            if field in data and isinstance(data[field], str):
+                data[field] = [item.strip() for item in data[field].split(',') if item.strip()]
+        return super().to_internal_value(data)
+
+class QuickClientConsultationRequestSerializer(NormalizeListFieldsMixin, serializers.ModelSerializer):
+    list_fields_to_normalize = ['psychologist_language', 'psychologist_gender', 'topic']
     psychologist_language = serializers.ListField(
         child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
         required=False
@@ -261,20 +271,9 @@ class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
             'comments'
         ]
 
-    def to_internal_value(self, data):
-        """
-        Удаляем client_name, age и gender из входящих данных, если пользователь авторизован и есть профиль.
-        """
-        request = self.context.get('request')
-        if request and request.user.is_authenticated and hasattr(request.user, 'client_profile'):
-            for field in ['client_name', 'age', 'gender']:
-                data.pop(field, None)
-        return super().to_internal_value(data)
-
     def validate(self, data):
         user = self.context.get("request").user if self.context.get("request") else None
 
-        # Если пользователь НЕ аутентифицирован — все поля обязательны
         if not user or not user.is_authenticated:
             required_fields = ['client_name', 'age', 'gender', 'psychologist_language',
                                'preferred_psychologist_age', 'psychologist_gender', 'topic']
@@ -283,7 +282,10 @@ class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({field: "Это поле обязательно."})
         return data
 
-class AuthenticatedQuickClientConsultationRequestSerializer(serializers.ModelSerializer):
+
+class AuthenticatedQuickClientConsultationRequestSerializer(NormalizeListFieldsMixin, serializers.ModelSerializer):
+    list_fields_to_normalize = ['psychologist_language', 'psychologist_gender', 'topic']
+
     psychologist_language = serializers.ListField(
         child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
         required=False
@@ -307,8 +309,9 @@ class AuthenticatedQuickClientConsultationRequestSerializer(serializers.ModelSer
             'topic',
             'comments'
         ]
+class QuickClientConsultationAnonymousSerializer(NormalizeListFieldsMixin, serializers.ModelSerializer):
+    list_fields_to_normalize = ['psychologist_language', 'psychologist_gender', 'topic']
 
-class QuickClientConsultationAnonymousSerializer(serializers.ModelSerializer):
     preferred_psychologist_age = serializers.IntegerField(required=False, allow_null=True)
     psychologist_language = serializers.ListField(
         child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
