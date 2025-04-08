@@ -8,8 +8,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 import logging
 from ailaq.enums import (
-    ClientGenderEnum, PsychologistGenderEnum,
-    CommunicationLanguageEnum, PreferredPsychologistGenderEnum, LanguageEnum
+    ClientGenderEnum, PsychologistGenderEnum
 )
 
 logger = logging.getLogger(__name__)

@@ -39,24 +39,32 @@ async def get_approved_psychologists():
 
     return approved_psychologists
 
+
 async def notify_all_psychologists(consultation):
     approved_psychologists = await get_approved_psychologists()
 
-    # Получаем язык клиента
+    # Получаем язык клиента (переводим каждый язык через перечисление)
     language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
 
-    # Получаем пол клиента
-    gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
-    psychologist_gender = ', '.join([PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(consultation.psychologist_gender, list) else PsychologistGenderEnum[consultation.psychologist_gender].value
+    # Получаем пол клиента (если список, то преобразуем в строку; если строка, то используем как есть)
+    gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
+        consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
 
-    # Переводим тему с использованием ProblemEnum
-    topic = ', '.join([ProblemEnum[item.upper()].value if item.upper() in ProblemEnum.__members__ else item for item in consultation.topic])
+    # Получаем пол психолога (аналогично полю клиента)
+    psychologist_gender = ', '.join(
+        [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
+        consultation.psychologist_gender, list) else PsychologistGenderEnum[consultation.psychologist_gender].value
+
+    # Переводим тему с использованием ProblemEnum (используем upper() для того, чтобы получить правильный ключ в Enum)
+    topic = ', '.join([ProblemEnum[item.upper()].value if item.upper() in ProblemEnum.__members__ else item for item in
+                       consultation.topic])
 
     # Проверяем возраст психолога
     preferred_min_age = getattr(consultation, 'preferred_psychologist_age_min', None)
     preferred_max_age = getattr(consultation, 'preferred_psychologist_age_max', None)
     age_info = f"Возраст психолога: от {preferred_min_age} до {preferred_max_age}" if preferred_min_age and preferred_max_age else "Возраст психолога не указан"
 
+    # Формируем сообщение для психологов
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
         f"Язык: {language}\n"
@@ -67,6 +75,7 @@ async def notify_all_psychologists(consultation):
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
     )
 
+    # Отправляем уведомление каждому психологу
     for p in approved_psychologists:
         try:
             dynamic_bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
