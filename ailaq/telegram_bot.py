@@ -335,7 +335,7 @@ async def notify_client_to_leave_review(request_obj):
         try:
             text = (
                 f"🙏 Пожалуйста, оцените вашу сессию с психологом "
-                f"{request_obj.taken_by.user.get_full_name() if request_obj.taken_by else 'специалистом'}.\n"
+                f"{request_obj.taken_by.user.full_name if request_obj.taken_by else 'специалистом'}.\n"
                 "Введите оценку от 1 до 5 и добавьте отзыв."
             )
             send_telegram_message(request_obj.telegram_id, text)
@@ -371,7 +371,7 @@ async def process_review(update, context):
             "request_obj": request_obj,
             "review_type": review_type,
         }
-        name = request_obj.taken_by.user.get_full_name() if request_obj.taken_by else "психолог"
+        name = request_obj.taken_by.user.full_name if request_obj.taken_by else "психолог"
         await update.message.reply_text(f"📝 Введите текст отзыва для {name}.", parse_mode="Markdown")
     elif telegram_id in pending_reviews:
         data = pending_reviews[telegram_id]
@@ -382,7 +382,7 @@ async def process_review(update, context):
             rating=rating,
             text=message_text,
             client_name=request_obj.client_name,
-            psychologist_name=request_obj.taken_by.user.get_full_name() if request_obj.taken_by else "психолог"
+            psychologist_name=request_obj.taken_by.user.full_name if request_obj.taken_by else "психолог"
         )
 
         if data["review_type"] == "consultation":
@@ -509,7 +509,7 @@ async def remind_clients_about_reviews():
             try:
                 await send_telegram_message(
                     session.telegram_id,
-                    f"💬 Пожалуйста, оставьте отзыв о сессии с психологом {session.psychologist.user.get_full_name()}"
+                    f"💬 Пожалуйста, оставьте отзыв о сессии с психологом {session.psychologist.user.full_name}"
                 )
                 session.review_requested = True
                 session.save(update_fields=["review_requested"])
