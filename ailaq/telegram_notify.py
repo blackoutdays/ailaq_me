@@ -45,7 +45,7 @@ async def notify_all_psychologists(consultation):
         f"Язык: {consultation.psychologist_language}\n"
         f"Пол клиента: {consultation.gender}, возраст: {consultation.age}\n"
         f"Предпочтения: психолог {consultation.psychologist_gender}, "
-        f"возраст: {consultation.preferred_psychologist_age}\n"
+        f"Возраст психолога: от {consultation.preferred_psychologist_min_age} до {consultation.preferred_psychologist_max_age}\n"
         f"Тема: {consultation.topic}\n"
         f"Комментарий: {consultation.comments or 'нет'}\n\n"
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
