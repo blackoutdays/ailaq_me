@@ -5,7 +5,7 @@ from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
 
-from ailaq.enums import LanguageEnum, ClientGenderEnum, ProblemEnum
+from ailaq.enums import LanguageEnum, ClientGenderEnum, ProblemEnum, PsychologistGenderEnum
 from ailaq.models import PsychologistProfile
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,8 @@ async def notify_all_psychologists(consultation):
     language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
 
     # Получаем пол клиента
-    gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender])
+    gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
+    psychologist_gender = ', '.join([PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(consultation.psychologist_gender, list) else PsychologistGenderEnum[consultation.psychologist_gender].value
 
     # Переводим тему с использованием ProblemEnum
     topic = ', '.join([ProblemEnum[item.upper()].value if item.upper() in ProblemEnum.__members__ else item for item in consultation.topic])
@@ -60,7 +61,7 @@ async def notify_all_psychologists(consultation):
         f"🆕 Новая заявка на быструю консультацию\n"
         f"Язык: {language}\n"
         f"Пол клиента: {gender}, возраст: {consultation.age}\n"
-        f"Предпочтения: психолог {consultation.psychologist_gender}, {age_info}\n"
+        f"Предпочтения: психолог {psychologist_gender}, {age_info}\n"
         f"Тема: {topic}\n"
         f"Комментарий: {consultation.comments or 'нет'}\n\n"
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
