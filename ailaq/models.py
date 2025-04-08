@@ -110,7 +110,8 @@ class CustomUser(AbstractBaseUser):
     def __str__(self):
         return self.email or f"Telegram User {self.telegram_id}"
 
-    def get_full_name(self):
+    @property
+    def full_name(self):
         if hasattr(self, "psychologist_profile") and getattr(self, "psychologist_profile", None):
             return self.psychologist_profile.get_full_name()
         return self.username or self.email or f"Telegram User {self.telegram_id}"
@@ -611,17 +612,9 @@ class QuickClientConsultationRequest(models.Model):
         choices=[(tag.name, tag.value) for tag in PsychologistAgeEnum],
         verbose_name="Возраст специалиста"
     )
-    psychologist_gender = models.CharField(
-        max_length=10,
-        choices=[(tag.name, tag.value) for tag in PreferredPsychologistGenderEnum],
-        verbose_name="Пол специалиста"
-    )
-    psychologist_language = models.CharField(
-        max_length=10,
-        choices=[(tag.name, tag.value) for tag in CommunicationLanguageEnum],
-        verbose_name="Язык общения"
-    )
-    topic = models.CharField(max_length=255, verbose_name="Тема")
+    psychologist_gender = models.JSONField(default=list, blank=True, null=True, verbose_name="Пол специалиста")
+    psychologist_language = models.JSONField(default=list, blank=True, null=True, verbose_name="Язык общения")
+    topic = models.JSONField(default=list, blank=True, null=True, verbose_name="Тема")
     comments = models.TextField(verbose_name="Комментарий")
     client_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
     created_at = models.DateTimeField(default=now)

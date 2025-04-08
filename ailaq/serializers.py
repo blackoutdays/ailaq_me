@@ -8,6 +8,8 @@ from hashlib import sha256
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 import hmac
+
+from .enums import CommunicationLanguageEnum, PreferredPsychologistGenderEnum
 from .tasks import send_email_async
 import time
 from drf_extra_fields.fields import Base64ImageField, Base64FileField
@@ -183,6 +185,10 @@ class ClientProfileSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
     telegram_id = serializers.CharField(source="user.telegram_id", read_only=True)
+    communication_language = serializers.ListField(
+        child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
+        required=False
+    )
 
     class Meta:
         model = ClientProfile
@@ -233,6 +239,19 @@ class ClientProfileSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
+    psychologist_language = serializers.ListField(
+        child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
+        required=False
+    )
+    psychologist_gender = serializers.ListField(
+        child=serializers.ChoiceField(choices=[tag.name for tag in PreferredPsychologistGenderEnum]),
+        required=False
+    )
+    topic = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
     class Meta:
         model = QuickClientConsultationRequest
         fields = [
@@ -264,6 +283,19 @@ class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
         return data
 
 class AuthenticatedQuickClientConsultationRequestSerializer(serializers.ModelSerializer):
+    psychologist_language = serializers.ListField(
+        child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
+        required=False
+    )
+    psychologist_gender = serializers.ListField(
+        child=serializers.ChoiceField(choices=[tag.name for tag in PreferredPsychologistGenderEnum]),
+        required=False
+    )
+    topic = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
     class Meta:
         model = QuickClientConsultationRequest
         fields = [
@@ -275,6 +307,19 @@ class AuthenticatedQuickClientConsultationRequestSerializer(serializers.ModelSer
         ]
 
 class QuickClientConsultationAnonymousSerializer(serializers.ModelSerializer):
+
+    psychologist_language = serializers.ListField(
+        child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
+        required=False
+    )
+    psychologist_gender = serializers.ListField(
+        child=serializers.ChoiceField(choices=[tag.name for tag in PreferredPsychologistGenderEnum]),
+        required=False
+    )
+    topic = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
 
     class Meta:
         model = QuickClientConsultationRequest
