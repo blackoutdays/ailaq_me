@@ -1,10 +1,10 @@
+# ailaq/telegram_notify.py
 import logging
 import requests
 from telegram import Bot
 from django.conf import settings
-from asgiref.sync import sync_to_async, async_to_sync
+from asgiref.sync import sync_to_async
 from ailaq.models import PsychologistProfile
-from ailaq.telegram_bot import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def notify_client_about_direct_request(telegram_id, psychologist_name):
         f"📩 Ваша заявка отправлена психологу *{psychologist_name}*.\n"
         "Он получит уведомление и скоро свяжется с вами в Telegram."
     )
-    async_to_sync(send_telegram_message)(telegram_id, text)
+    send_telegram_message_sync(telegram_id, text)
 
 def notify_client_about_request_sent(telegram_id):
     text = (
