@@ -55,9 +55,10 @@ async def notify_all_psychologists(consultation):
         [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
         consultation.psychologist_gender, list) else PsychologistGenderEnum[consultation.psychologist_gender].value
 
-    # Переводим тему с использованием ProblemEnum (используем upper() для того, чтобы получить правильный ключ в Enum)
-    topic = ', '.join([ProblemEnum[item.upper()].value if item.upper() in ProblemEnum.__members__ else item for item in
-                       consultation.topic])
+    topic = ', '.join([
+        ProblemEnum[item.upper()].value if item.lower() in ProblemEnum.__members__ else item
+        for item in consultation.topic
+    ])
 
     # Проверяем возраст психолога
     preferred_min_age = getattr(consultation, 'preferred_psychologist_age_min', None)
