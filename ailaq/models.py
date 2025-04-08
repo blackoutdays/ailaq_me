@@ -8,7 +8,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 import logging
 from ailaq.enums import (
-    ClientGenderEnum, PsychologistAgeEnum, PsychologistGenderEnum,
+    ClientGenderEnum, PsychologistGenderEnum,
     CommunicationLanguageEnum, PreferredPsychologistGenderEnum, LanguageEnum
 )
 
@@ -607,9 +607,9 @@ class QuickClientConsultationRequest(models.Model):
         choices=[(tag.name, tag.value) for tag in ClientGenderEnum],
         verbose_name="Пол клиента"
     )
-    preferred_psychologist_age = models.CharField(
-        max_length=20,
-        choices=[(tag.name, tag.value) for tag in PsychologistAgeEnum],
+    preferred_psychologist_age = models.PositiveIntegerField(
+        null=True,
+        blank=True,
         verbose_name="Возраст специалиста"
     )
     psychologist_gender = models.JSONField(default=list, blank=True, null=True, verbose_name="Пол специалиста")

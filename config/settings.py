@@ -191,7 +191,6 @@ SPECTACULAR_SETTINGS = {
         'ailaq.models.QuickClientConsultationRequest.gender': 'ailaq.enums.ClientGenderEnum',
         'ailaq.models.QuickClientConsultationRequest.psychologist_gender': 'ailaq.enums.PreferredPsychologistGenderEnum',
         'ailaq.models.QuickClientConsultationRequest.psychologist_language': 'ailaq.enums.CommunicationLanguageEnum',
-        'ailaq.models.QuickClientConsultationRequest.preferred_psychologist_age': 'ailaq.enums.PsychologistAgeEnum',
         'ailaq.models.PsychologistApplication.gender': 'ailaq.enums.PsychologistGenderEnum',
         'ailaq.models.PsychologistApplication.communication_language': 'ailaq.enums.CommunicationLanguageEnum',
     }
