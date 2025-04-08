@@ -251,6 +251,7 @@ class QuickClientConsultationRequestSerializer(serializers.ModelSerializer):
         child=serializers.CharField(),
         required=False
     )
+    preferred_psychologist_age = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = QuickClientConsultationRequest
@@ -295,6 +296,7 @@ class AuthenticatedQuickClientConsultationRequestSerializer(serializers.ModelSer
         child=serializers.CharField(),
         required=False
     )
+    preferred_psychologist_age = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = QuickClientConsultationRequest
@@ -307,7 +309,7 @@ class AuthenticatedQuickClientConsultationRequestSerializer(serializers.ModelSer
         ]
 
 class QuickClientConsultationAnonymousSerializer(serializers.ModelSerializer):
-
+    preferred_psychologist_age = serializers.IntegerField(required=False, allow_null=True)
     psychologist_language = serializers.ListField(
         child=serializers.ChoiceField(choices=[tag.name for tag in CommunicationLanguageEnum]),
         required=False
