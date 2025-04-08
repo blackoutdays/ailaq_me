@@ -24,7 +24,7 @@ class CommunicationLanguageEnum(Enum):
     KK = 'Казахский'
 
 class ProblemEnum(Enum):
-    AGGRESSION = 'Агрессия, ссоры и конфликты'
+    aggression = 'Агрессия, ссоры и конфликты'
     PREGNANCY = 'Беременность и материнство'
     BAD_HABITS = 'Вредные привычки и зависимости'
     DEPRESSION = 'Депрессия и стресс'

@@ -46,9 +46,12 @@ async def notify_all_psychologists(consultation):
     # Получаем язык клиента (переводим каждый язык через перечисление)
     language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
 
-    # Получаем пол клиента (если список, то преобразуем в строку; если строка, то используем как есть)
-    gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
-        consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
+    # Получаем пол психолога (аналогично полю клиента)
+    psychologist_gender = ', '.join(
+        [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]
+        if isinstance(consultation.psychologist_gender, list)
+        else [PsychologistGenderEnum[consultation.psychologist_gender].value]
+    )
 
     # Получаем пол психолога (аналогично полю клиента)
     psychologist_gender = ', '.join(
