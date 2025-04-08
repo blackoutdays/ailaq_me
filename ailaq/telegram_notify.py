@@ -4,7 +4,7 @@ from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async, async_to_sync
 from ailaq.models import PsychologistProfile
-from .telegram_notify import send_telegram_message
+from ailaq.telegram_bot import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
