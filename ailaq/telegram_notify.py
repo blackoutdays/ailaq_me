@@ -55,8 +55,9 @@ async def notify_all_psychologists(consultation):
         [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
         consultation.psychologist_gender, list) else PsychologistGenderEnum[consultation.psychologist_gender].value
 
+    # Переводим тему с использованием ProblemEnum (обрабатываем каждый элемент, проверяя его на соответствие ключам в перечислении)
     topic = ', '.join([
-        ProblemEnum[item.upper()].value if item.lower() in ProblemEnum.__members__ else item
+        ProblemEnum[item.upper()].value if item.upper() in ProblemEnum.__members__ else item
         for item in consultation.topic
     ])
 
