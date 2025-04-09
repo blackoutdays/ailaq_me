@@ -113,14 +113,18 @@ async def notify_all_psychologists(consultation):
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
     )
 
-    # Отправляем уведомление каждому психологу
     for p in approved_psychologists:
-        if p.user.telegram_id:  # Проверка на существование telegram_id
+        telegram_id = p.user.telegram_id
+
+        if telegram_id:  # Проверка на существование telegram_id
             try:
-                await bot.send_message(chat_id=p.user.telegram_id, text=message)
-                logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
+                # Log the telegram_id type for debugging
+                logging.info(f"Пытаемся отправить сообщение психологу с ID {telegram_id} ({type(telegram_id)})")
+
+                await bot.send_message(chat_id=telegram_id, text=message)
+                logging.info(f"Уведомление отправлено психологу с ID {telegram_id}")
             except Exception as e:
-                logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user.telegram_id}: {e}")
+                logging.error(f"[TELEGRAM] Ошибка отправки психологу {telegram_id}: {e}")
         else:
             logging.warning(f"[TELEGRAM] У психолога с ID {p.user_id} нет Telegram ID")
 
