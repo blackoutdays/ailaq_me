@@ -230,7 +230,7 @@ async def notify_psychologist_telegram(session_request):
     try:
         # Получаем данные сессии с психологом
         session_request = await sync_to_async(
-            lambda: PsychologistSessionRequest.objects.select_related("psychologist__user").get(id=session_request.id)
+            lambda: PsychologistSessionRequest.objects.select_related("psychologist__user", "client").get(id=session_request.id)
         )()
 
         # Получаем Telegram ID психолога
