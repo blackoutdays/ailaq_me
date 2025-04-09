@@ -1206,7 +1206,7 @@ class UploadProfilePhotoView(APIView):
         # Возвращаем успешный ответ с URL фото
         return Response({
             "message": "Фото успешно загружено.",
-            "profile_picture_url": profile.profile_picture.url
+            "profile_picture_url": request.build_absolute_uri(profile.profile_picture.url)
         }, status=status.HTTP_200_OK)
 
 
