@@ -477,9 +477,9 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
         return None
 
     def get_profile_picture_url(self, obj):
-        """Возвращает URL фотографии профиля психолога"""
-        if obj.profile_picture:
-            return obj.profile_picture.url
+        request = self.context.get('request')
+        if obj.profile_picture and request:
+            return request.build_absolute_uri(obj.profile_picture.url)
         return None
 
 class EducationDocumentSerializer(serializers.ModelSerializer):
@@ -624,15 +624,15 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         ]
 
     def get_profile_picture_url(self, obj):
-        """Возвращает URL фотографии профиля психолога"""
-        if obj.profile_picture:
-            return obj.profile_picture.url
+        request = self.context.get('request')
+        if obj.profile_picture and request:
+            return request.build_absolute_uri(obj.profile_picture.url)
         return None
 
     def get_office_photo_url(self, obj):
-        """Возвращает URL фото офиса, если оно существует"""
-        if obj.office_photo:
-            return obj.office_photo.url
+        request = self.context.get('request')
+        if obj.office_photo and request:
+            return request.build_absolute_uri(obj.office_photo.url)
         return None
 
     def get_full_name(self, obj):
