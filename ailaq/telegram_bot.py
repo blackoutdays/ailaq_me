@@ -5,10 +5,10 @@ from ailaq.enums import ClientGenderEnum, ProblemEnum
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
-
 import logging
 import asyncio
 from datetime import datetime, timezone, timedelta
+from django.db import transaction
 import nest_asyncio
 nest_asyncio.apply()
 from telegram.ext import (
@@ -101,42 +101,43 @@ async def handle_accept_callback(update, context):
 
     session_id = int(data.split("_")[-1])
     try:
-        session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(
-            id=session_id)
+        # Start a transaction to handle session state updates atomically
+        with transaction.atomic():
+            # Get the session and related data
+            session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(id=session_id)
 
-        # Проверка, была ли заявка уже принята
-        if session.taken_by:
-            await bot.edit_message_reply_markup(
-                chat_id=query.message.chat_id,
-                message_id=query.message.message_id,
-                reply_markup=None
-            )
-            await bot.send_message(
-                chat_id=query.from_user.id,
-                text="⛔️ Эта заявка уже была принята другим психологом."
-            )
-            return
+            # Check if the session is already taken
+            if session.taken_by:
+                await bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=None
+                )
+                await bot.send_message(
+                    chat_id=query.from_user.id,
+                    text="⛔️ Эта заявка уже была принята другим психологом."
+                )
+                return
 
-        # Получаем информацию о психологе
-        psychologist = session.psychologist
-        app = psychologist.application
+            # Get the psychologist's data and validate
+            psychologist = session.psychologist
+            app = psychologist.application
 
-        # Проверяем, подходит ли психолог по предпочтениям
-        if not (
-            app.status == 'APPROVED' and
-            app.gender == session.psychologist_gender and
-            app.communication_language == session.psychologist_language and
-            matches_age(app.birth_date, session.preferred_psychologist_age_min, session.preferred_psychologist_age_max)
-        ):
-            await query.edit_message_text("⚠️ Вы не подходите по критериям для этой заявки.")
-            return
+            if not (
+                app.status == 'APPROVED' and
+                app.gender == session.psychologist_gender and
+                app.communication_language == session.psychologist_language and
+                matches_age(app.birth_date, session.preferred_psychologist_age_min, session.preferred_psychologist_age_max)
+            ):
+                await query.edit_message_text("⚠️ Вы не подходите по критериям для этой заявки.")
+                return
 
-        # Помечаем заявку как принятую
-        session.taken_by = psychologist
-        session.status = "CONTACTED"
-        await sync_to_async(session.save)()
+            # Accept the session and update state
+            session.taken_by = psychologist
+            session.status = "CONTACTED"
+            await sync_to_async(session.save)()
 
-        # Скрыть кнопку и обновить текст
+        # Send confirmation messages
         new_text = query.message.text + "\n\n🎉 Заявка принята!"
         await bot.edit_message_text(
             chat_id=query.message.chat_id,
@@ -145,7 +146,7 @@ async def handle_accept_callback(update, context):
             parse_mode="Markdown"
         )
 
-        # Получаем Telegram username клиента (если есть)
+        # Get client info
         session_user = await sync_to_async(User.objects.filter(telegram_id=session.telegram_id).first)()
         telegram_info = (
             f"🌐 Telegram: @{session_user.username}"
@@ -153,7 +154,7 @@ async def handle_accept_callback(update, context):
             else f"🌐 Telegram ID: {session.telegram_id}"
         )
 
-        # Отправка данных психологу
+        # Notify the psychologist
         await bot.send_message(
             chat_id=query.from_user.id,
             text=(
@@ -165,14 +166,14 @@ async def handle_accept_callback(update, context):
             )
         )
 
-        # ✅ Добавляем inline-клавиатуру для обновления статуса
+        # Send inline keyboard for status update
         await bot.send_message(
             chat_id=query.from_user.id,
             text="📋 Обновите статус заявки:",
             reply_markup=build_status_update_keyboard(session.id)
         )
 
-        # Отправить сообщение клиенту о том, что психолог принял заявку
+        # Notify the client
         await send_telegram_message(
             session.telegram_id,
             "Вашу заявку принял психолог. Сессия скоро начнётся. После неё я попрошу вас оставить отзыв 🙏"

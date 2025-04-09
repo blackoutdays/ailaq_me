@@ -123,13 +123,10 @@ async def notify_all_psychologists(consultation):
         except Exception as e:
             logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
 
-
 def get_language_code(language_code):
-    # Check for 'KK' and convert to 'KZ' for Kazakh language
     if language_code == 'KK':
         return 'Казахский'
     return LanguageEnum[language_code].value
-
 
 def notify_client_about_direct_request(telegram_id, psychologist_name):
     text = (
