@@ -238,20 +238,27 @@ async def notify_psychologist_telegram(session_request):
         if not telegram_id:
             return
 
-        # Преобразуем пол в читаемое значение
-        gender_display = ClientGenderEnum[session_request.gender].value  # Преобразуем в строку, например "Мужской" или "Женский"
+        # Получаем профиль клиента для данных
+        client_profile = session_request.client
 
-        # Преобразуем язык клиента в читаемое значение
-        language_display = ", ".join(session_request.client.communication_language) if session_request.client.communication_language else "Не указано"
+        # Преобразуем пол клиента в читаемое значение
+        gender_display = ClientGenderEnum.get(client_profile.gender, "Не указан").value
+
+        # Получаем язык общения клиента (если указан)
+        language_display = ", ".join(client_profile.communication_language) if client_profile.communication_language else "Не указано"
+
+        # Возраст клиента
+        age_display = client_profile.age
 
         # Преобразуем проблему клиента в читаемое значение
-        problem_display = ProblemEnum[session_request.topic].value  # Преобразуем тему
+        problem_display = ProblemEnum.get(session_request.topic, "Не указано").value  # Преобразуем тему
 
         text = (
             f"📥 Новая заявка от клиента!\n"
             f"👤 Имя: {session_request.client_name}\n"
+            f"📅 Возраст: {age_display}\n"
             f"🧠 Тема: {problem_display}\n"
-            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"
+            f"📊 Пол: {gender_display}\n"
             f"💬 Комментарий: {session_request.comments or 'нет'}\n"
             f"🗣️ Язык клиента: {language_display}"  # Отображаем язык
         )
