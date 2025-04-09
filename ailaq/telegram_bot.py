@@ -236,24 +236,37 @@ async def notify_psychologist_telegram(session_request):
         # Получаем Telegram ID психолога
         telegram_id = session_request.psychologist.user.telegram_id
         if not telegram_id:
+            logging.error(f"Психолог с ID {session_request.psychologist.id} не имеет Telegram ID.")
             return
 
         # Преобразуем пол в читаемое значение
-        gender_display = ClientGenderEnum[session_request.gender].value  # Преобразуем в строку, например "Мужской" или "Женский"
+        try:
+            gender_display = ClientGenderEnum[session_request.gender].value
+        except KeyError:
+            gender_display = "Unknown"  # Set to a default value or handle as needed
+            logging.error(f"Неверное значение пола: {session_request.gender}")
 
         # Преобразуем язык клиента в читаемое значение
-        language_display = LanguageEnum[session_request.language].value  # Преобразуем язык
+        try:
+            language_display = LanguageEnum[session_request.language].value
+        except KeyError:
+            language_display = "Unknown"  # Set to a default value or handle as needed
+            logging.error(f"Неверное значение языка: {session_request.language}")
 
         # Преобразуем проблему клиента в читаемое значение
-        problem_display = ProblemEnum[session_request.topic].value  # Преобразуем тему
+        try:
+            problem_display = ProblemEnum[session_request.topic].value
+        except KeyError:
+            problem_display = "Unknown"  # Set to a default value or handle as needed
+            logging.error(f"Неверное значение проблемы: {session_request.topic}")
 
         text = (
             f"📥 Новая заявка от клиента!\n"
             f"👤 Имя: {session_request.client_name}\n"
-            f"🧠 Тема: {problem_display}\n"  # Используем читаемое значение проблемы
-            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"  # Используем читаемое значение пола
+            f"🧠 Тема: {problem_display}\n"
+            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"
             f"💬 Комментарий: {session_request.comments or 'нет'}\n"
-            f"🗣️ Язык клиента: {language_display}"  # Отображаем язык
+            f"🗣️ Язык клиента: {language_display}"
         )
 
         # Кнопки для принятия заявки
