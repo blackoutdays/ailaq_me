@@ -615,8 +615,9 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
             'first_name_ru', 'last_name_ru', 'middle_name_ru', 'birth_date', 'gender',
             'communication_language', 'service_countries', 'service_cities', 'about_me_ru',
             'catalog_description_ru', 'qualification', 'works_with', 'problems_worked_with',
-            'work_methods', 'experience_years', 'academic_degree', 'additional_specialization',
-            'additional_psychologist_directions', 'education', 'education_files', 'country',
+            'work_methods', 'experience_years', 'academic_degree', 'additional_psychologist_directions',
+            'children_psychologist_directions', 'coach_directions', 'psychiatrist_directions', 'associations_memberships',
+            'education', 'education_files', 'country',
             'city', 'office_address', 'office_photo_url', 'service_sessions', 'is_verified',
             'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'created_at', 'updated_at',
             'profile_picture_url'
