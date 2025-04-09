@@ -718,7 +718,6 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 # Квалификация психолога
-
 class EducationDocumentInputSerializer(serializers.Serializer):
     document = Base64FileField(required=True)
     year = serializers.IntegerField(required=False, allow_null=True)
@@ -726,16 +725,22 @@ class EducationDocumentInputSerializer(serializers.Serializer):
     file_signature = serializers.CharField(required=False, allow_blank=True)
 
 class QualificationSerializer(serializers.ModelSerializer):
-    office_photo = Base64ImageField(required=False, allow_null=True)
-    education_files = EducationDocumentInputSerializer(many=True, required=False)
-    file_signature = serializers.CharField(required=False, allow_blank=True)
+    qualification = serializers.CharField()
+    works_with = serializers.ListField(child=serializers.CharField(), required=False)
+    problems_worked_with = serializers.ListField(child=serializers.CharField(), required=False)
+    work_methods = serializers.ListField(child=serializers.CharField(), required=False)
+    experience_years = serializers.IntegerField()
+    academic_degree = serializers.CharField(allow_null=True)
+    education = serializers.ListField(child=serializers.CharField())
+    office_photo = serializers.ImageField(allow_null=True)
+    education_files = EducationDocumentInputSerializer(many=True)
 
     class Meta:
         model = PsychologistApplication
         fields = [
             'qualification', 'works_with', 'problems_worked_with', 'work_methods',
             'experience_years', 'academic_degree', 'education',
-            'office_photo', 'education_files', 'file_signature'
+            'office_photo', 'education_files'
         ]
 
 class UserIdSerializer(serializers.ModelSerializer):
