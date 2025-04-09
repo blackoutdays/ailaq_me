@@ -17,15 +17,6 @@ class CommunicationLanguageEnum(Enum):
     RU = 'Русский'
     EN = 'Английский'
     KK = 'Казахский'
-    KZ = 'Казахский'
-
-def get_language_code(language_code):
-    try:
-        if language_code in ['KK', 'KZ']:
-            return 'Казахский'
-        return CommunicationLanguageEnum[language_code].value
-    except KeyError:
-        return 'Неизвестный язык'  # или любое другое дефолтное значение
 
 class ProblemEnum(Enum):
     aggression = 'Агрессия, ссоры и конфликты'
