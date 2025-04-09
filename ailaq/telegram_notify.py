@@ -1,11 +1,12 @@
 # ailaq/telegram_notify.py
 import logging
 import requests
+from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
-from ailaq.enums import LanguageEnum, ClientGenderEnum, PsychologistGenderEnum
+
+from ailaq.enums import LanguageEnum, ClientGenderEnum, ProblemEnum, PsychologistGenderEnum
 from ailaq.models import PsychologistProfile
-from ailaq.telegram_bot import bot
 
 logger = logging.getLogger(__name__)
 
@@ -113,20 +114,14 @@ async def notify_all_psychologists(consultation):
         f"Если вы подходите по критериям — отправьте /accept_{consultation.id}"
     )
 
+    # Отправляем уведомление каждому психологу
     for p in approved_psychologists:
-        telegram_id = p.user.telegram_id
-
-        if telegram_id:  # Проверка на существование telegram_id
-            try:
-                # Log the telegram_id type for debugging
-                logging.info(f"Пытаемся отправить сообщение психологу с ID {telegram_id} ({type(telegram_id)})")
-
-                await bot.send_message(chat_id=telegram_id, text=message)
-                logging.info(f"Уведомление отправлено психологу с ID {telegram_id}")
-            except Exception as e:
-                logging.error(f"[TELEGRAM] Ошибка отправки психологу {telegram_id}: {e}")
-        else:
-            logging.warning(f"[TELEGRAM] У психолога с ID {p.user_id} нет Telegram ID")
+        try:
+            dynamic_bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+            await dynamic_bot.send_message(chat_id=p.user.telegram_id, text=message)
+            logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
+        except Exception as e:
+            logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
 
 def notify_client_about_direct_request(telegram_id, psychologist_name):
     text = (
