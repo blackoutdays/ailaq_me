@@ -167,9 +167,17 @@ async def handle_accept_callback(update, context):
         logging.error(f"Ошибка в callback accept_session: {e}")
         await query.message.reply_text("Ошибка при принятии заявки")
 
-async def send_telegram_message(telegram_id, text, retries=5, delay=2):
+async def send_telegram_message(telegram_id, text, reply_markup=None, retries=5, delay=2):
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": telegram_id, "text": text, "parse_mode": "Markdown"}
+    payload = {
+        "chat_id": telegram_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+
+    # Если reply_markup передан, добавляем его в payload
+    if reply_markup:
+        payload["reply_markup"] = reply_markup.to_json()
 
     # Используем AsyncClient с ограничением на количество соединений
     async with httpx.AsyncClient(limits=httpx.Limits(max_connections=100)) as client:
