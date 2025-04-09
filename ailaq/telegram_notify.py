@@ -1,11 +1,9 @@
 # ailaq/telegram_notify.py
 import logging
 import requests
-from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
-
-from ailaq.enums import LanguageEnum, ClientGenderEnum, ProblemEnum, PsychologistGenderEnum
+from ailaq.enums import LanguageEnum, ClientGenderEnum, PsychologistGenderEnum
 from ailaq.models import PsychologistProfile
 from ailaq.telegram_bot import bot
 
@@ -117,11 +115,14 @@ async def notify_all_psychologists(consultation):
 
     # Отправляем уведомление каждому психологу
     for p in approved_psychologists:
-        try:
-            await bot.send_message(chat_id=p.user.telegram_id, text=message)
-            logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
-        except Exception as e:
-            logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+        if p.user.telegram_id:  # Проверка на существование telegram_id
+            try:
+                await bot.send_message(chat_id=p.user.telegram_id, text=message)
+                logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
+            except Exception as e:
+                logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user.telegram_id}: {e}")
+        else:
+            logging.warning(f"[TELEGRAM] У психолога с ID {p.user_id} нет Telegram ID")
 
 def notify_client_about_direct_request(telegram_id, psychologist_name):
     text = (
