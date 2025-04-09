@@ -233,9 +233,11 @@ async def notify_psychologist_telegram(session_request):
             lambda: PsychologistSessionRequest.objects.select_related("psychologist__user").get(id=session_request.id)
         )()
 
-        # Получаем Telegram ID психолога
-        telegram_id = session_request.psychologist.user.telegram_id
-        if not telegram_id:
+        # Проверяем, есть ли Telegram ID у психолога
+        if session_request.psychologist and session_request.psychologist.user:
+            telegram_id = session_request.psychologist.user.telegram_id
+        else:
+            logging.error(f"Ошибка: у психолога нет Telegram ID. Session ID: {session_request.id}")
             return
 
         # Преобразуем пол в читаемое значение
@@ -247,13 +249,21 @@ async def notify_psychologist_telegram(session_request):
         # Преобразуем проблему клиента в читаемое значение
         problem_display = ProblemEnum[session_request.topic].value  # Преобразуем тему
 
+        # Логируем собранные данные для уведомления
+        logging.info(f"Отправка уведомления психологу {telegram_id} о новой заявке:\n"
+                     f"Имя клиента: {session_request.client_name}\n"
+                     f"Тема: {problem_display}\n"
+                     f"Пол клиента: {gender_display}\n"
+                     f"Язык: {language_display}\n")
+
+        # Формируем текст уведомления
         text = (
             f"📥 Новая заявка от клиента!\n"
             f"👤 Имя: {session_request.client_name}\n"
-            f"🧠 Тема: {problem_display}\n"  # Используем читаемое значение проблемы
-            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"  # Используем читаемое значение пола
+            f"🧠 Тема: {problem_display}\n"
+            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"
             f"💬 Комментарий: {session_request.comments or 'нет'}\n"
-            f"🗣️ Язык клиента: {language_display}"  # Отображаем язык
+            f"🗣️ Язык клиента: {language_display}"
         )
 
         # Кнопки для принятия заявки
@@ -267,10 +277,12 @@ async def notify_psychologist_telegram(session_request):
             text=text,
             reply_markup=keyboard
         )
+        logging.info(f"Уведомление отправлено психологу с ID {telegram_id}")
 
     except Exception as e:
         logging.error(f"❌ Ошибка уведомления психолога: {e}")
 
+        
 # Callback-хендлер для обработки "Принято"
 async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
