@@ -22,6 +22,7 @@ class CommunicationLanguageEnum(Enum):
     RU = 'Русский'
     EN = 'Английский'
     KK = 'Казахский'
+    KZ = 'Казахский'
 
 class ProblemEnum(Enum):
     aggression = 'Агрессия, ссоры и конфликты'
