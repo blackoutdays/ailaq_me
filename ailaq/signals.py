@@ -26,6 +26,7 @@ def handle_custom_user_post_save(sender, instance, created, **kwargs):
         PsychologistApplication.objects.get_or_create(user=instance)
         PsychologistProfile.objects.get_or_create(user=instance)
         logger.info(f"🧠 Созданы заявка и профиль для психолога {instance.id}")
+
 @receiver(post_save, sender=PsychologistApplication)
 def handle_application_status_change(sender, instance, **kwargs):
     user = instance.user
@@ -39,7 +40,8 @@ def handle_application_status_change(sender, instance, **kwargs):
         profile.application = instance
         profile.save(update_fields=["application"])
 
-    if instance.status == 'APPROVED':
+    # Проверяем, что заявка одобрена администратором
+    if instance.status == 'APPROVED' and user.is_staff:  # Проверка на роль администратора
         user.is_psychologist = True
         user.save(update_fields=["is_psychologist"])
         profile.is_verified = True

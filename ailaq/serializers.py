@@ -732,7 +732,7 @@ class QualificationSerializer(serializers.ModelSerializer):
     experience_years = serializers.IntegerField()
     academic_degree = serializers.CharField(allow_null=True)
     education = serializers.ListField(child=serializers.CharField())
-    office_photo = serializers.ImageField(allow_null=True)
+    office_photo = serializers.ImageField(required=False, allow_null=True)
     education_files = EducationDocumentInputSerializer(many=True)
 
     class Meta:
@@ -771,5 +771,3 @@ class UpdatePsychologistApplicationStatusSerializer(serializers.ModelSerializer)
         instance.status = validated_data.get('status', instance.status)
         instance.save()
         return instance
-
-

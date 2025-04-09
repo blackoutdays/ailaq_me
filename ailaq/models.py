@@ -261,7 +261,6 @@ class PsychologistApplication(models.Model):
     # Фото офиса
     office_photo = models.ImageField(upload_to='office_photos/', null=True, blank=True)
 
-    # **Приемы (сессии)**
     SESSION_TYPES = [
         ('INDIVIDUAL', 'Индивидуальная консультация'),
         ('COUPLE', 'Парная консультация'),
