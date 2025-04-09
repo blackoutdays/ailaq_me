@@ -39,6 +39,7 @@ async def get_approved_psychologists():
 
     return approved_psychologists
 
+
 async def notify_all_psychologists(consultation):
     approved_psychologists = await get_approved_psychologists()
 
@@ -46,8 +47,11 @@ async def notify_all_psychologists(consultation):
     client_profile = consultation.client
     client_name = client_profile.get_full_name() if client_profile else "Не указано"
     logging.info(f"Client Name: {client_name}")
-    # Получаем язык клиента (переводим каждый язык через перечисление)
-    language = ', '.join([CommunicationLanguageEnum[lang].value for lang in consultation.psychologist_language])
+
+    # Получаем язык клиента (переводим каждый язык через перечисление, добавив проверку на наличие значения в Enum)
+    language = ', '.join([get_language_code(lang) for lang in consultation.psychologist_language if
+                          lang in CommunicationLanguageEnum.__members__])
+
     gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
         consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
 
