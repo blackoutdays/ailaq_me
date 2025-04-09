@@ -242,8 +242,8 @@ async def notify_psychologist_telegram(session_request):
         client_profile = session_request.client
 
         # Преобразуем пол клиента в читаемое значение
-        gender_display = ClientGenderEnum.get(client_profile.gender, "Не указан").value
-
+        gender_display = ClientGenderEnum[
+            client_profile.gender].value if client_profile.gender in ClientGenderEnum.__members__ else "Не указан"
         # Получаем язык общения клиента (если указан)
         language_display = ", ".join(client_profile.communication_language) if client_profile.communication_language else "Не указано"
 
