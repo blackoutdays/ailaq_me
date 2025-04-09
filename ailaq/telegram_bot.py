@@ -1,7 +1,7 @@
 import os
 import django
 
-from ailaq.enums import ClientGenderEnum, LanguageEnum, ProblemEnum
+from ailaq.enums import ClientGenderEnum, ProblemEnum
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
@@ -11,25 +11,23 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 import nest_asyncio
 nest_asyncio.apply()
-
-import requests
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CallbackQueryHandler, ContextTypes
-from ailaq.models import QuickClientConsultationRequest, PsychologistSessionRequest
-from django.contrib.auth import get_user_model
-from django.conf import settings
-from asgiref.sync import sync_to_async
-from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
     MessageHandler,
     filters,
+    CallbackQueryHandler,
 )
+import httpx
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from ailaq.models import QuickClientConsultationRequest, PsychologistSessionRequest
+from django.contrib.auth import get_user_model
+from django.conf import settings
+from asgiref.sync import sync_to_async
 import telegram
-
 from ailaq.models import Review, PsychologistProfile, ClientProfile
+
 bot = telegram.Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
 logging.basicConfig(
@@ -103,7 +101,8 @@ async def handle_accept_callback(update, context):
 
     session_id = int(data.split("_")[-1])
     try:
-        session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(id=session_id)
+        session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(
+            id=session_id)
 
         # Уже принято
         if session.taken_by:
@@ -168,64 +167,26 @@ async def handle_accept_callback(update, context):
         logging.error(f"Ошибка в callback accept_session: {e}")
         await query.message.reply_text("Ошибка при принятии заявки")
 
-def send_telegram_message_sync(telegram_id, text):
+async def send_telegram_message(telegram_id, text, retries=5, delay=2):
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": telegram_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-    except Exception as e:
-        logging.error(f"Ошибка отправки сообщения Telegram ID {telegram_id}: {e}")
+    payload = {"chat_id": telegram_id, "text": text, "parse_mode": "Markdown"}
 
-def matches_age(birth_date, preferred_min, preferred_max):
-    if not birth_date:
-        return False
-    age = (datetime.today().date() - birth_date).days // 365
-    if preferred_min is not None and age < preferred_min:
-        return False
-    if preferred_max is not None and age > preferred_max:
-        return False
-    return True
+    # Используем AsyncClient с ограничением на количество соединений
+    async with httpx.AsyncClient(limits=httpx.Limits(max_connections=100)) as client:
+        for attempt in range(retries):
+            try:
+                response = await client.post(url, json=payload)  # асинхронно отправляем запрос
+                response.raise_for_status()  # проверяем статус ответа
+                return response  # если все прошло успешно, возвращаем ответ
+            except httpx.HTTPStatusError as e:
+                logging.error(f"HTTP ошибка: {e}")  # логируем ошибки статуса
+            except httpx.RequestError as e:
+                logging.error(f"Ошибка запроса: {e}")  # логируем ошибки запроса
 
-async def get_psychologist_profile(telegram_id):
-    return await sync_to_async(PsychologistProfile.objects.get)(user__telegram_id=telegram_id)
+            # Экспоненциальное увеличение задержки для повторных попыток
+            await asyncio.sleep(delay * (2 ** attempt))  # экспоненциальный backoff
 
-async def get_client_profile(telegram_id):
-    return await sync_to_async(ClientProfile.objects.get)(user__telegram_id=telegram_id)
-
-async def send_welcome_message(telegram_id):
-    """Бот отправляет приветственное сообщение, когда получает Telegram ID"""
-    await bot.send_message(telegram_id, "Привет! Теперь я могу писать вам первым.")
-
-async def link_telegram_user(update, context):
-    telegram_id = update.effective_chat.id
-    username = update.effective_chat.username or f"user_{telegram_id}"
-
-    user = await sync_to_async(User.objects.filter(telegram_id=telegram_id).first)()
-
-    if user:
-        await update.message.reply_text("Вы уже привязаны к системе.")
-    else:
-        await update.message.reply_text(
-            "👤 Мы не нашли вас в системе.\n"
-            "Если вы хотите пользоваться платформой как клиент или психолог, пожалуйста, зарегистрируйтесь: "
-            f"{settings.FRONTEND_URL}/register"
-        )
-
-async def send_telegram_message(telegram_id, text):
-    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": telegram_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    response = requests.post(url, json=payload)
-    response.raise_for_status()
-
+    logging.error(f"Не удалось отправить сообщение после {retries} попыток.")
 
 async def notify_psychologist_telegram(session_request):
     try:
@@ -273,8 +234,8 @@ async def notify_psychologist_telegram(session_request):
         ])
 
         # Отправка сообщения психологу
-        await bot.send_message(
-            chat_id=telegram_id,
+        await send_telegram_message(
+            telegram_id=telegram_id,
             text=text,
             reply_markup=keyboard
         )
@@ -282,6 +243,41 @@ async def notify_psychologist_telegram(session_request):
     except Exception as e:
         logging.error(f"❌ Ошибка уведомления психолога: {str(e)}")
         logging.exception("Полные детали ошибки:")
+
+def matches_age(birth_date, preferred_min, preferred_max):
+    if not birth_date:
+        return False
+    age = (datetime.today().date() - birth_date).days // 365
+    if preferred_min is not None and age < preferred_min:
+        return False
+    if preferred_max is not None and age > preferred_max:
+        return False
+    return True
+
+async def get_psychologist_profile(telegram_id):
+    return await sync_to_async(PsychologistProfile.objects.get)(user__telegram_id=telegram_id)
+
+async def get_client_profile(telegram_id):
+    return await sync_to_async(ClientProfile.objects.get)(user__telegram_id=telegram_id)
+
+async def send_welcome_message(telegram_id):
+    """Бот отправляет приветственное сообщение, когда получает Telegram ID"""
+    await bot.send_message(telegram_id, "Привет! Теперь я могу писать вам первым.")
+
+async def link_telegram_user(update, context):
+    telegram_id = update.effective_chat.id
+    username = update.effective_chat.username or f"user_{telegram_id}"
+
+    user = await sync_to_async(User.objects.filter(telegram_id=telegram_id).first)()
+
+    if user:
+        await update.message.reply_text("Вы уже привязаны к системе.")
+    else:
+        await update.message.reply_text(
+            "👤 Мы не нашли вас в системе.\n"
+            "Если вы хотите пользоваться платформой как клиент или психолог, пожалуйста, зарегистрируйтесь: "
+            f"{settings.FRONTEND_URL}/register"
+        )
 
 # Callback-хендлер для обработки "Принято"
 async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
