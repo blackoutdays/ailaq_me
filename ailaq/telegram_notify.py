@@ -39,9 +39,12 @@ async def get_approved_psychologists():
 
     return approved_psychologists
 
-
 async def notify_all_psychologists(consultation):
     approved_psychologists = await get_approved_psychologists()
+
+    # Получаем имя клиента из профиля
+    client_profile = consultation.client
+    client_name = client_profile.get_full_name() if client_profile else "Не указано"
 
     # Получаем язык клиента (переводим каждый язык через перечисление)
     language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
@@ -86,17 +89,13 @@ async def notify_all_psychologists(consultation):
 
     # Переводим тему с использованием problems_dict
     topic = ', '.join([problems_dict.get(item, item) for item in consultation.topic])
+
     # Получаем пол психолога (аналогично полю клиента)
     psychologist_gender = ', '.join(
         [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]
         if isinstance(consultation.psychologist_gender, list)
         else [PsychologistGenderEnum[consultation.psychologist_gender].value]
     )
-
-    # Получаем пол психолога (аналогично полю клиента)
-    psychologist_gender = ', '.join(
-        [PsychologistGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
-        consultation.psychologist_gender, list) else PsychologistGenderEnum[consultation.psychologist_gender].value
 
     # Проверяем возраст психолога
     preferred_min_age = getattr(consultation, 'preferred_psychologist_age_min', None)
@@ -106,6 +105,7 @@ async def notify_all_psychologists(consultation):
     # Формируем сообщение для психологов
     message = (
         f"🆕 Новая заявка на быструю консультацию\n"
+        f"👤 Имя клиента: {client_name}\n"
         f"Язык: {language}\n"
         f"Пол клиента: {gender}, возраст: {consultation.age}\n"
         f"Предпочтения: психолог {psychologist_gender}, {age_info}\n"
@@ -122,6 +122,7 @@ async def notify_all_psychologists(consultation):
             logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
         except Exception as e:
             logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+
 
 def notify_client_about_direct_request(telegram_id, psychologist_name):
     text = (

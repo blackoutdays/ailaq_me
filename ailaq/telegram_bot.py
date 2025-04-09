@@ -76,7 +76,7 @@ async def handle_status_update_callback(update, context):
         elif action == "complete":
             session.status = "COMPLETED"
             status_message = "✅ Сессия завершена. Спасибо! Клиенту будет предложено оставить отзыв."
-            await notify_client_to_leave_review(session)
+            await notify_client_to_leave_review(session)  # Запрашиваем отзыв
         elif action == "not_completed":
             session.status = "NOT_COMPLETED"
             status_message = "❌ Вы отметили, что сессия не состоялась."
@@ -158,6 +158,7 @@ async def handle_accept_callback(update, context):
             reply_markup=build_status_update_keyboard(session.id)
         )
 
+        # Отправить сообщение клиенту о том, что психолог принял заявку
         await send_telegram_message(
             session.telegram_id,
             "Вашу заявку принял психолог. Сессия скоро начнётся. После неё я попрошу вас оставить отзыв 🙏"
@@ -371,17 +372,18 @@ async def process_session_request(update: Update, context: ContextTypes.DEFAULT_
     except ValueError:
         await update.message.reply_text("Ошибка: Telegram ID должен быть числом.")
 
-async def notify_client_to_leave_review(request_obj):
-    if request_obj.telegram_id:
+async def notify_client_to_leave_review(session_request):
+    if session_request.telegram_id:
         try:
+            # Формируем сообщение для клиента с просьбой оставить отзыв
             text = (
                 f"🙏 Пожалуйста, оцените вашу сессию с психологом "
-                f"{request_obj.taken_by.user.full_name if request_obj.taken_by else 'специалистом'}.\n"
+                f"{session_request.taken_by.user.full_name if session_request.taken_by else 'специалистом'}.\n"
                 "Введите оценку от 1 до 5 и добавьте отзыв."
             )
-            send_telegram_message(request_obj.telegram_id, text)
-            request_obj.review_requested = True
-            request_obj.save(update_fields=["review_requested"])
+            await send_telegram_message(session_request.telegram_id, text)
+            session_request.review_requested = True
+            session_request.save(update_fields=["review_requested"])
         except Exception as e:
             logging.error(f"Ошибка отправки отзыва: {e}")
 
@@ -390,6 +392,7 @@ async def process_review(update, context):
     message_text = update.message.text.strip()
 
     try:
+        # Ищем заявку, которая завершена и ожидает отзыв
         request_obj = await sync_to_async(PsychologistSessionRequest.objects.filter)(
             telegram_id=telegram_id, status="COMPLETED", review__isnull=True
         )
@@ -419,6 +422,7 @@ async def process_review(update, context):
         request_obj = data["request_obj"]
         rating = data["rating"]
 
+        # Сохраняем отзыв
         review = Review(
             rating=rating,
             text=message_text,
