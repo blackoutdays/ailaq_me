@@ -537,24 +537,15 @@ class PsychologistProfileView(APIView):
     )
     def get(self, request):
         try:
-            # Получаем заявку психолога
-            application = PsychologistApplication.objects.filter(user=request.user).first()
+            # Создаём заявку, если нет
+            application, _ = PsychologistApplication.objects.get_or_create(user=request.user)
 
-            if not application:
-                logger.error(f"Заявка психолога не найдена для пользователя {request.user.id}")
-                return Response({"error": "Заявка психолога не найдена."}, status=status.HTTP_404_NOT_FOUND)
+            # Создаём профиль, если нет
+            psychologist, _ = PsychologistProfile.objects.get_or_create(user=request.user, application=application)
 
-            # Получаем профиль психолога
-            psychologist = PsychologistProfile.objects.filter(user=request.user).first()
-            if not psychologist:
-                logger.error(f"Профиль психолога не найден для пользователя {request.user.id}")
-                return Response({"error": "Профиль психолога не найден."}, status=status.HTTP_404_NOT_FOUND)
-
-            # Получаем отзывы по полю psychologist
             reviews = Review.objects.filter(psychologist=psychologist).order_by("-created_at")
             reviews_serializer = ReviewSerializer(reviews, many=True)
 
-            # Формируем данные для ответа
             data = {
                 "personal_info": PersonalInfoSerializer(application).data,
                 "qualification": QualificationSerializer(application).data,
@@ -564,6 +555,7 @@ class PsychologistProfileView(APIView):
             }
 
             return Response(data, status=status.HTTP_200_OK)
+
         except Exception as e:
             logger.error(f"Ошибка при получении профиля психолога: {str(e)}")
             return Response({"error": "Не удалось получить профиль психолога."},
