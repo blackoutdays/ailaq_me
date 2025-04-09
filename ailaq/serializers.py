@@ -294,7 +294,6 @@ class QuickClientConsultationRequestSerializer(NormalizeListFieldsMixin, seriali
                     raise serializers.ValidationError({field: "Это поле обязательно."})
         return data
 
-
 class AuthenticatedQuickClientConsultationRequestSerializer(NormalizeListFieldsMixin, serializers.ModelSerializer):
     list_fields_to_normalize = ['psychologist_language', 'psychologist_gender', 'topic']
     int_fields_to_normalize = ['preferred_psychologist_age_min', 'preferred_psychologist_age_max']
@@ -572,7 +571,6 @@ class FAQListSerializer(serializers.Serializer):
     )
 
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
-    # user = serializers.ReadOnlyField(source="user.email")
     full_name = serializers.SerializerMethodField()
     birth_date = serializers.DateField()
     gender = serializers.CharField()
@@ -588,8 +586,11 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
     work_methods = serializers.CharField()
     experience_years = serializers.IntegerField()
     academic_degree = serializers.CharField()
-    additional_specialization = serializers.CharField()
     additional_psychologist_directions = serializers.CharField()
+    children_psychologist_directions = serializers.ListField(child=serializers.CharField(), required=False)
+    coach_directions = serializers.ListField(child=serializers.CharField(), required=False)
+    psychiatrist_directions = serializers.ListField(child=serializers.CharField(), required=False)
+    associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
     education = serializers.ListField(child=serializers.CharField())
     education_files = EducationDocumentSerializer(many=True)
     country = serializers.CharField()

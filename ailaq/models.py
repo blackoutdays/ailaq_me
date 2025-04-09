@@ -205,9 +205,8 @@ class PsychologistApplication(models.Model):
         null=True, blank=True
     )
     communication_language = models.JSONField(default=list, blank=True, null=True)
-
-    service_countries = models.JSONField(default=list, blank=True, help_text="Список стран приема")
-    service_cities = models.JSONField(default=list, blank=True, help_text="Список городов приема")
+    service_countries = models.CharField(max_length=255, blank=True, null=True, help_text="Список стран приема")
+    service_cities = models.CharField(max_length=255, blank=True, null=True, help_text="Список городов приема")
 
     # О себе
     about_me_ru = models.TextField(null=True, blank=True)
@@ -233,11 +232,20 @@ class PsychologistApplication(models.Model):
     # Научная степень
     academic_degree = models.CharField(max_length=100, null=True, blank=True)
 
-    # Дополнительная специализация
-    additional_specialization = models.JSONField(default=list, blank=True, null=True)
-
     # Дополнительные направления
     additional_psychologist_directions = models.JSONField(default=list, blank=True, null=True)
+
+    # Дополнительные направления для детских психологов
+    children_psychologist_directions = models.JSONField(default=list, blank=True, null=True)
+
+    # Направления для коучей
+    coach_directions = models.JSONField(default=list, blank=True, null=True)
+
+    # Направления для психиатров
+    psychiatrist_directions = models.JSONField(default=list, blank=True, null=True)
+
+    # Членства в ассоциациях (с возможностью добавлять несколько)
+    associations_memberships = models.JSONField(default=list, blank=True, null=True, help_text="Список ассоциаций")
 
     # Образование (JSON: Год + Название)
     education = models.JSONField(default=list, blank=True, null=True)
