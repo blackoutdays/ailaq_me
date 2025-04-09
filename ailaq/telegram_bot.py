@@ -250,8 +250,8 @@ async def notify_psychologist_telegram(session_request):
         text = (
             f"📥 Новая заявка от клиента!\n"
             f"👤 Имя: {session_request.client_name}\n"
-            f"🧠 Тема: {problem_display}\n"  # Используем читаемое значение проблемы
-            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"  # Используем читаемое значение пола
+            f"🧠 Тема: {problem_display}\n"
+            f"📅 Возраст: {session_request.age}, Пол: {gender_display}\n"
             f"💬 Комментарий: {session_request.comments or 'нет'}\n"
             f"🗣️ Язык клиента: {language_display}"  # Отображаем язык
         )
