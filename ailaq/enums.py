@@ -13,6 +13,11 @@ class PreferredPsychologistGenderEnum(Enum):
     MALE = 'Мужской'
     FEMALE = 'Женский'
 
+class LanguageEnum(Enum):
+    RU = 'Русский'
+    EN = 'Английский'
+    KK = 'Казахский'
+
 class CommunicationLanguageEnum(Enum):
     RU = 'Русский'
     EN = 'Английский'

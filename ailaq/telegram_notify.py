@@ -5,7 +5,7 @@ from telegram import Bot
 from django.conf import settings
 from asgiref.sync import sync_to_async
 
-from ailaq.enums import ClientGenderEnum, PsychologistGenderEnum, CommunicationLanguageEnum
+from ailaq.enums import ClientGenderEnum, PsychologistGenderEnum, LanguageEnum
 from ailaq.models import PsychologistProfile
 
 logger = logging.getLogger(__name__)
@@ -47,9 +47,7 @@ async def notify_all_psychologists(consultation):
     logging.info(f"Client Name: {client_name}")
 
     # Handle language code directly (KZ treated as KK)
-    language = ', '.join([CommunicationLanguageEnum[lang].value if lang != 'KZ' else 'Казахский'
-                          for lang in consultation.psychologist_language
-                          if lang in CommunicationLanguageEnum.__members__])
+    language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
 
     gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
         consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
