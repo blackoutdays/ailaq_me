@@ -660,6 +660,7 @@ class PsychologistSessionRequest(models.Model):
     client_name = models.CharField("Имя клиента", max_length=255)
     age = models.PositiveIntegerField("Возраст")
     gender = models.CharField("Пол", max_length=10)
+
     telegram_id = models.CharField("Telegram ID", max_length=100)
     topic = models.CharField("Тема запроса", max_length=255)
     comments = models.TextField("Комментарий", blank=True)
