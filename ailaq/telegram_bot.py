@@ -226,11 +226,13 @@ async def send_telegram_message(telegram_id, text):
     response = requests.post(url, json=payload)
     response.raise_for_status()
 
+
 async def notify_psychologist_telegram(session_request):
     try:
         # Получаем данные сессии с психологом
         session_request = await sync_to_async(
-            lambda: PsychologistSessionRequest.objects.select_related("psychologist__user", "client").get(id=session_request.id)
+            lambda: PsychologistSessionRequest.objects.select_related("psychologist__user", "client").get(
+                id=session_request.id)
         )()
 
         # Получаем Telegram ID психолога
@@ -244,14 +246,16 @@ async def notify_psychologist_telegram(session_request):
         # Преобразуем пол клиента в читаемое значение
         gender_display = ClientGenderEnum[
             client_profile.gender].value if client_profile.gender in ClientGenderEnum.__members__ else "Не указан"
+
         # Получаем язык общения клиента (если указан)
-        language_display = ", ".join(client_profile.communication_language) if client_profile.communication_language else "Не указано"
+        language_display = ", ".join(
+            client_profile.communication_language) if client_profile.communication_language else "Не указано"
 
         # Возраст клиента
         age_display = client_profile.age
 
         # Преобразуем проблему клиента в читаемое значение
-        problem_display = ProblemEnum.get(session_request.topic, "Не указано").value  # Преобразуем тему
+        problem_display = ProblemEnum.__members__.get(session_request.topic, "Не указано")
 
         text = (
             f"📥 Новая заявка от клиента!\n"
