@@ -39,7 +39,6 @@ async def get_approved_psychologists():
 
     return approved_psychologists
 
-
 async def notify_all_psychologists(consultation):
     approved_psychologists = await get_approved_psychologists()
 
@@ -47,7 +46,7 @@ async def notify_all_psychologists(consultation):
     logging.info(f"Client Name: {client_name}")
 
     # Handle language code directly (KZ treated as KK)
-    language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
+    language = ', '.join([get_language_code(lang) for lang in consultation.psychologist_language])
 
     gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
         consultation.psychologist_gender, list) else ClientGenderEnum[consultation.psychologist_gender].value
@@ -123,6 +122,14 @@ async def notify_all_psychologists(consultation):
             logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
         except Exception as e:
             logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
+
+
+def get_language_code(language_code):
+    # Check for 'KK' and convert to 'KZ' for Kazakh language
+    if language_code == 'KK':
+        return 'Казахский'
+    return LanguageEnum[language_code].value
+
 
 def notify_client_about_direct_request(telegram_id, psychologist_name):
     text = (
