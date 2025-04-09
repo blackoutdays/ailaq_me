@@ -7,6 +7,7 @@ from asgiref.sync import sync_to_async
 
 from ailaq.enums import LanguageEnum, ClientGenderEnum, ProblemEnum, PsychologistGenderEnum
 from ailaq.models import PsychologistProfile
+from ailaq.telegram_bot import bot
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +118,7 @@ async def notify_all_psychologists(consultation):
     # Отправляем уведомление каждому психологу
     for p in approved_psychologists:
         try:
-            dynamic_bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
-            await dynamic_bot.send_message(chat_id=p.user.telegram_id, text=message)
+            await bot.send_message(chat_id=p.user.telegram_id, text=message)
             logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
         except Exception as e:
             logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
