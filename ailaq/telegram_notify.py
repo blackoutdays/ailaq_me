@@ -45,7 +45,7 @@ async def notify_all_psychologists(consultation):
     # Получаем имя клиента из профиля
     client_profile = consultation.client
     client_name = client_profile.get_full_name() if client_profile else "Не указано"
-
+    logging.info(f"Client Name: {client_name}")
     # Получаем язык клиента (переводим каждый язык через перечисление)
     language = ', '.join([LanguageEnum[lang].value for lang in consultation.psychologist_language])
     gender = ', '.join([ClientGenderEnum[gen].value for gen in consultation.psychologist_gender]) if isinstance(
@@ -122,7 +122,6 @@ async def notify_all_psychologists(consultation):
             logging.info(f"Уведомление отправлено психологу с ID {p.user.telegram_id}")
         except Exception as e:
             logging.error(f"[TELEGRAM] Ошибка отправки психологу {p.user_id}: {e}")
-
 
 def notify_client_about_direct_request(telegram_id, psychologist_name):
     text = (

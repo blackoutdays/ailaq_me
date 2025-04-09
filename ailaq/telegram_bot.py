@@ -104,7 +104,7 @@ async def handle_accept_callback(update, context):
         session = await sync_to_async(PsychologistSessionRequest.objects.select_related("psychologist__user").get)(
             id=session_id)
 
-        # Уже принято
+        # Проверка, была ли заявка уже принята
         if session.taken_by:
             await bot.edit_message_reply_markup(
                 chat_id=query.message.chat_id,
@@ -117,12 +117,26 @@ async def handle_accept_callback(update, context):
             )
             return
 
-        # Принять заявку
-        session.taken_by = session.psychologist
+        # Получаем информацию о психологе
+        psychologist = session.psychologist
+        app = psychologist.application
+
+        # Проверяем, подходит ли психолог по предпочтениям
+        if not (
+            app.status == 'APPROVED' and
+            app.gender == session.psychologist_gender and
+            app.communication_language == session.psychologist_language and
+            matches_age(app.birth_date, session.preferred_psychologist_age_min, session.preferred_psychologist_age_max)
+        ):
+            await query.edit_message_text("⚠️ Вы не подходите по критериям для этой заявки.")
+            return
+
+        # Помечаем заявку как принятую
+        session.taken_by = psychologist
         session.status = "CONTACTED"
         await sync_to_async(session.save)()
 
-        # Обновить текст и скрыть кнопки
+        # Скрыть кнопку и обновить текст
         new_text = query.message.text + "\n\n🎉 Заявка принята!"
         await bot.edit_message_text(
             chat_id=query.message.chat_id,
@@ -131,7 +145,7 @@ async def handle_accept_callback(update, context):
             parse_mode="Markdown"
         )
 
-        # Получить Telegram username клиента (если есть)
+        # Получаем Telegram username клиента (если есть)
         session_user = await sync_to_async(User.objects.filter(telegram_id=session.telegram_id).first)()
         telegram_info = (
             f"🌐 Telegram: @{session_user.username}"
@@ -166,7 +180,7 @@ async def handle_accept_callback(update, context):
 
     except Exception as e:
         logging.error(f"Ошибка в callback accept_session: {e}")
-        await query.message.reply_text("Ошибка при принятии заявки")
+        await query.message.reply_text("⚠️ Ошибка при принятии заявки")
 
 async def send_telegram_message(telegram_id, text, reply_markup=None, retries=5, delay=2):
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
