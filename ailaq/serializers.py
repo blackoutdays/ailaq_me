@@ -449,11 +449,16 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
     city = serializers.CharField(source='application.service_cities', read_only=True)
     about_me = serializers.CharField(source='application.about_me_ru', read_only=True)
     qualification = serializers.CharField(source='application.qualification', read_only=True)
+    profile_picture = serializers.ImageField(write_only=True, required=False)
     profile_picture_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PsychologistProfile
-        fields = ['profile_id', 'full_name', 'age', 'qualification', 'experience_years', 'country', 'city', 'about_me', 'profile_picture_url']
+        fields = [
+            'profile_id', 'full_name', 'age', 'qualification',
+            'experience_years', 'country', 'city', 'about_me',
+            'profile_picture', 'profile_picture_url',
+        ]
 
     def get_full_name(self, obj):
         if obj.application:
@@ -690,7 +695,7 @@ class CatalogSerializer(serializers.ModelSerializer):
 
 #для вьющек сериализаторы по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
-    profile_picture = serializers.ImageField(required=False, allow_null=True)
+    profile_picture_url = serializers.SerializerMethodField()
     telegram_id = serializers.SerializerMethodField()
 
     class Meta:
@@ -699,11 +704,17 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
             'first_name_ru', 'last_name_ru', 'middle_name_ru',
             'birth_date', 'gender', 'communication_language',
             'service_countries', 'service_cities', 'telegram_id',
-            'about_me_ru', 'catalog_description_ru', 'profile_picture'
+            'about_me_ru', 'catalog_description_ru', 'profile_picture_url'
         ]
 
     def get_telegram_id(self, obj):
         return obj.user.telegram_id
+
+    def get_profile_picture_url(self, obj):
+        request = self.context.get("request")
+        if obj.profile_picture and request:
+            return request.build_absolute_uri(obj.profile_picture.url)
+        return None
 
     def update(self, instance, validated_data):
         profile_picture = validated_data.pop('profile_picture', None)
