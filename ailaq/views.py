@@ -571,7 +571,7 @@ class PersonalInfoView(APIView):
     def get(self, request):
         try:
             application = get_object_or_404(PsychologistApplication, user=request.user)
-            serializer = PersonalInfoSerializer(application)
+            serializer = PersonalInfoSerializer(application, context={"request": request})  # ← Вот это добавили
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Ошибка при получении личной информации: {str(e)}")
