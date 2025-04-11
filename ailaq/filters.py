@@ -1,5 +1,6 @@
 from django_filters import rest_framework as filters
 from ailaq.models import PsychologistProfile
+from django.db.models import Q
 
 class PsychologistProfileFilter(filters.FilterSet):
     full_name = filters.CharFilter(field_name="get_full_name", lookup_expr="icontains", label="Поиск по имени")
@@ -31,6 +32,7 @@ class PsychologistProfileFilter(filters.FilterSet):
 
     def filter_communication_language(self, queryset, name, value):
         languages = [lang.strip() for lang in value.split(',') if lang.strip()]
+        q = Q()
         for lang in languages:
-            queryset = queryset.filter(application__communication_language__contains=[lang])
-        return queryset
+            q |= Q(application__communication_language__contains=[lang])
+        return queryset.filter(q)
