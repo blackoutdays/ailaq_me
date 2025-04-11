@@ -440,6 +440,17 @@ class PsychologistChangePasswordSerializer(serializers.Serializer):
         user.save()
         return user
 
+class EducationDocumentSerializer(serializers.ModelSerializer):
+    document = serializers.FileField(required=True)
+    year = serializers.IntegerField(required=False, allow_null=True)
+    title = serializers.CharField(required=False, allow_blank=True)
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = EducationDocument
+        fields = ['document', 'year', 'title', 'file_signature']
+
+
 class PsychologistProfileSerializer(serializers.ModelSerializer):
     profile_id = serializers.IntegerField(source="id", read_only=True)
     full_name = serializers.SerializerMethodField()
@@ -484,15 +495,80 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.profile_picture.url)
         return None
 
-class EducationDocumentSerializer(serializers.ModelSerializer):
-    document = serializers.FileField(required=True)
-    year = serializers.IntegerField(required=False, allow_null=True)
-    title = serializers.CharField(required=False, allow_blank=True)
-    file_signature = serializers.CharField(required=False, allow_blank=True)
+
+class PsychologistApplicationSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    birth_date = serializers.DateField()
+    gender = serializers.CharField()
+    communication_language = serializers.ListField(child=serializers.CharField(), required=False)
+    telegram_id = serializers.SerializerMethodField()
+    service_countries = serializers.ListField(child=serializers.CharField())
+    service_cities = serializers.ListField(child=serializers.CharField())
+    about_me_ru = serializers.CharField()
+    catalog_description_ru = serializers.CharField()
+    qualification = serializers.ListField(child=serializers.CharField(), required=False)
+    works_with = serializers.ListField(child=serializers.CharField(), required=False)
+    problems_worked_with = serializers.ListField(child=serializers.CharField(), required=False)
+    work_methods = serializers.ListField(child=serializers.CharField(), required=False)
+    experience_years = serializers.IntegerField()
+    academic_degree = serializers.CharField()
+    additional_psychologist_directions = serializers.ListField(child=serializers.CharField(), required=False)
+    additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
+    associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
+    education = serializers.ListField(child=serializers.CharField())
+    education_files = EducationDocumentSerializer(many=True)
+    country = serializers.CharField()
+    city = serializers.CharField()
+    office_address = serializers.CharField()
+    office_photo_url = serializers.SerializerMethodField()
+    service_sessions = serializers.ListField(child=serializers.DictField())
+    is_verified = serializers.BooleanField()
+    is_in_catalog = serializers.BooleanField()
+    rating_system = serializers.FloatField()
+    internal_rating = serializers.FloatField()
+    status = serializers.CharField()
+    profile_picture_url = serializers.SerializerMethodField()
+    purchased_applications = serializers.IntegerField()
+    created_at = serializers.DateTimeField(source='created', read_only=True)
+    updated_at = serializers.DateTimeField(source='updated', read_only=True)
 
     class Meta:
-        model = EducationDocument
-        fields = ['document', 'year', 'title', 'file_signature']
+        model = PsychologistApplication
+        fields = [
+            'id', 'full_name', 'telegram_id', 'purchased_applications',
+            'first_name_ru', 'last_name_ru', 'middle_name_ru', 'birth_date', 'gender',
+            'communication_language', 'service_countries', 'service_cities', 'about_me_ru',
+            'catalog_description_ru', 'qualification', 'works_with', 'problems_worked_with',
+            'work_methods', 'experience_years', 'academic_degree', 'additional_psychologist_directions',
+            'additional_specialization', 'associations_memberships', 'education', 'education_files', 'country',
+            'city', 'office_address', 'office_photo_url', 'service_sessions', 'is_verified',
+            'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'created_at', 'updated_at',
+            'profile_picture_url'
+        ]
+
+    def get_profile_picture_url(self, obj):
+        request = self.context.get('request')
+        picture = obj.profile_picture
+
+        if not picture and hasattr(obj, 'profile') and obj.profile.profile_picture:
+            picture = obj.profile.profile_picture
+
+        if picture and request:
+            return request.build_absolute_uri(picture.url)
+        return None
+
+    def get_office_photo_url(self, obj):
+        request = self.context.get('request')
+        if obj.office_photo and request:
+            return request.build_absolute_uri(obj.office_photo.url)
+        return None
+
+    def get_full_name(self, obj):
+        parts = [obj.last_name_ru, obj.first_name_ru, obj.middle_name_ru]
+        return " ".join(part for part in parts if part)
+
+    def get_telegram_id(self, obj):
+        return obj.user.telegram_id
 
 class SessionItemSerializer(serializers.Serializer):
     id = serializers.CharField(read_only=True)
@@ -571,75 +647,6 @@ class FAQListSerializer(serializers.Serializer):
         child=FAQSerializer(),
         required=False
     )
-
-class PsychologistApplicationSerializer(serializers.ModelSerializer):
-    full_name = serializers.SerializerMethodField()
-    birth_date = serializers.DateField()
-    gender = serializers.CharField()
-    communication_language = serializers.ListField(child=serializers.CharField(), required=False)
-    telegram_id = serializers.SerializerMethodField()
-    service_countries = serializers.ListField(child=serializers.CharField())
-    service_cities = serializers.ListField(child=serializers.CharField())
-    about_me_ru = serializers.CharField()
-    catalog_description_ru = serializers.CharField()
-    qualification = serializers.ListField(child=serializers.CharField(), required=False)
-    works_with = serializers.ListField(child=serializers.CharField(), required=False)
-    problems_worked_with = serializers.ListField(child=serializers.CharField(), required=False)
-    work_methods = serializers.ListField(child=serializers.CharField(), required=False)
-    experience_years = serializers.IntegerField()
-    academic_degree = serializers.CharField()
-    additional_psychologist_directions = serializers.ListField(child=serializers.CharField(), required=False)
-    additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
-    associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
-    education = serializers.ListField(child=serializers.CharField())
-    education_files = EducationDocumentSerializer(many=True)
-    country = serializers.CharField()
-    city = serializers.CharField()
-    office_address = serializers.CharField()
-    office_photo_url = serializers.SerializerMethodField()
-    service_sessions = serializers.ListField(child=serializers.DictField())
-    is_verified = serializers.BooleanField()
-    is_in_catalog = serializers.BooleanField()
-    rating_system = serializers.FloatField()
-    internal_rating = serializers.FloatField()
-    status = serializers.CharField()
-    profile_picture_url = serializers.SerializerMethodField()
-    purchased_applications = serializers.IntegerField()
-    created_at = serializers.DateTimeField(source='created', read_only=True)
-    updated_at = serializers.DateTimeField(source='updated', read_only=True)
-
-    class Meta:
-        model = PsychologistApplication
-        fields = [
-            'id', 'full_name', 'telegram_id', 'purchased_applications',
-            'first_name_ru', 'last_name_ru', 'middle_name_ru', 'birth_date', 'gender',
-            'communication_language', 'service_countries', 'service_cities', 'about_me_ru',
-            'catalog_description_ru', 'qualification', 'works_with', 'problems_worked_with',
-            'work_methods', 'experience_years', 'academic_degree', 'additional_psychologist_directions',
-            'additional_specialization', 'associations_memberships', 'education', 'education_files', 'country',
-            'city', 'office_address', 'office_photo_url', 'service_sessions', 'is_verified',
-            'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'created_at', 'updated_at',
-            'profile_picture_url'
-        ]
-
-    def get_profile_picture_url(self, obj):
-        request = self.context.get('request')
-        if obj.profile_picture and request:
-            return request.build_absolute_uri(obj.profile_picture.url)
-        return None
-
-    def get_office_photo_url(self, obj):
-        request = self.context.get('request')
-        if obj.office_photo and request:
-            return request.build_absolute_uri(obj.office_photo.url)
-        return None
-
-    def get_full_name(self, obj):
-        parts = [obj.last_name_ru, obj.first_name_ru, obj.middle_name_ru]
-        return " ".join(part for part in parts if part)
-
-    def get_telegram_id(self, obj):
-        return obj.user.telegram_id
 
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:
