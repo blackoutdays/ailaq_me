@@ -2,7 +2,6 @@ import base64
 import hmac
 import uuid
 from hashlib import sha256
-
 from django.core.files.base import ContentFile
 from rest_framework import generics
 from rest_framework.decorators import action
@@ -18,7 +17,7 @@ from django.utils.crypto import get_random_string
 from datetime import timedelta
 from django.db import transaction
 from . import models
-from .serializers import RegisterSerializer, ChangePasswordSerializer, TelegramAuthSerializer, \
+from .serializers import RegisterSerializer, ChangePasswordSerializer, \
     AuthenticatedQuickClientConsultationRequestSerializer, \
     QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
     PsychologistChangePasswordSerializer
@@ -44,14 +43,13 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-import telegram
-import logging
-
+from rest_framework.parsers import MultiPartParser, FormParser
 from .telegram_bot import send_telegram_message, notify_psychologist_telegram
 from .models import PsychologistSessionRequest
 from .serializers import AnonymousSessionRequestSerializer, AuthenticatedSessionRequestSerializer
 from .telegram_notify import notify_client_about_request_sent, notify_client_about_direct_request
+import telegram
+import logging
 
 logger = logging.getLogger("telegram_auth")
 User = get_user_model()
@@ -437,7 +435,7 @@ class PublicPsychologistProfileView(APIView):
             PsychologistProfile.objects.select_related("application"),
             user_id=psychologist_id
         )
-        serializer = PsychologistProfileSerializer(psychologist)
+        serializer = PsychologistProfileSerializer(psychologist, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class PublicQualificationView(APIView):
@@ -521,7 +519,7 @@ class PsychologistSelfProfileView(APIView):
         except PsychologistProfile.DoesNotExist:
             return Response({"error": "Вы не зарегистрированы как психолог."}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = PsychologistProfileSerializer(psychologist_profile)
+        serializer = PsychologistProfileSerializer(psychologist_profile, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 # Получение полного профиля психолога
@@ -547,9 +545,9 @@ class PsychologistProfileView(APIView):
             reviews_serializer = ReviewSerializer(reviews, many=True)
 
             data = {
-                "personal_info": PersonalInfoSerializer(application).data,
-                "qualification": QualificationSerializer(application).data,
-                "service_price": ServicePriceSerializer(application).data,
+                "personal_info": PersonalInfoSerializer(application, context={"request": request}).data,
+                "qualification": QualificationSerializer(application, context={"request": request}).data,
+                "service_price": ServicePriceSerializer(application, context={"request": request}).data,
                 "faq": FAQListSerializer({"faqs": application.faqs.all()}).data,
                 "reviews": reviews_serializer.data,
             }
@@ -1209,7 +1207,6 @@ class UploadProfilePhotoView(APIView):
             "profile_picture_url": request.build_absolute_uri(profile.profile_picture.url)
         }, status=status.HTTP_200_OK)
 
-
 class PsychologistApplicationViewSet(viewsets.ModelViewSet):
     queryset = PsychologistApplication.objects.all()
     serializer_class = PsychologistApplicationSerializer
@@ -1307,7 +1304,7 @@ class PsychologistApplicationViewSet(viewsets.ModelViewSet):
             application = self.get_object()
 
             # Возвращаем полную информацию о заявке
-            serializer = self.get_serializer(application)
+            serializer = self.get_serializer(application, context={"request": request})
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except PsychologistApplication.DoesNotExist:

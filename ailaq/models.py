@@ -585,7 +585,6 @@ class BuyRequest(models.Model):
     ]
     status = models.CharField(max_length=10, choices=status_choices, default='PENDING')
 
-
     def __str__(self):
         return f"BuyRequest from {self.client} to {self.psychologist}"
 
