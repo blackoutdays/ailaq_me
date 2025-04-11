@@ -491,8 +491,13 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
 
     def get_profile_picture_url(self, obj):
         request = self.context.get('request')
-        if obj.profile_picture and request:
-            return request.build_absolute_uri(obj.profile_picture.url)
+        picture = obj.profile_picture
+
+        if not picture and obj.application and obj.application.profile_picture:
+            picture = obj.application.profile_picture
+
+        if picture and request:
+            return request.build_absolute_uri(picture.url)
         return None
 
 
@@ -718,9 +723,14 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
         return obj.user.telegram_id
 
     def get_profile_picture_url(self, obj):
-        request = self.context.get("request")
-        if obj.profile_picture and request:
-            return request.build_absolute_uri(obj.profile_picture.url)
+        request = self.context.get('request')
+        picture = obj.profile_picture
+
+        if not picture and obj.application and obj.application.profile_picture:
+            picture = obj.application.profile_picture
+
+        if picture and request:
+            return request.build_absolute_uri(picture.url)
         return None
 
     def update(self, instance, validated_data):
