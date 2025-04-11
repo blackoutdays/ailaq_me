@@ -8,7 +8,7 @@ class PsychologistProfileFilter(filters.FilterSet):
     max_price = filters.NumberFilter(method="filter_max_price")
     city = filters.CharFilter(field_name="application__city", lookup_expr="icontains")
     is_verified = filters.BooleanFilter(field_name="is_verified")
-    communication_language = filters.CharFilter(field_name="application__communication_language", lookup_expr="iexact")
+    communication_language = filters.CharFilter(method="filter_communication_language")
     specialization = filters.CharFilter(field_name="application__qualification", lookup_expr="icontains")
     session_format = filters.ChoiceFilter(choices=[('ONLINE', 'Онлайн'), ('OFFLINE', 'Оффлайн')], label='Формат сессии')
 
@@ -28,3 +28,9 @@ class PsychologistProfileFilter(filters.FilterSet):
 
     def filter_max_price(self, queryset, name, value):
         return queryset.filter(application__service_sessions__contains=[{"price": value}])
+
+    def filter_communication_language(self, queryset, name, value):
+        languages = [lang.strip() for lang in value.split(',') if lang.strip()]
+        for lang in languages:
+            queryset = queryset.filter(application__communication_language__contains=[lang])
+        return queryset
