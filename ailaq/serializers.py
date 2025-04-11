@@ -321,7 +321,6 @@ class AuthenticatedQuickClientConsultationRequestSerializer(NormalizeListFieldsM
             'psychologist_gender', 'topic', 'comments'
         ]
 
-
 class QuickClientConsultationAnonymousSerializer(NormalizeListFieldsMixin, serializers.ModelSerializer):
     list_fields_to_normalize = ['psychologist_language', 'psychologist_gender', 'topic']
     int_fields_to_normalize = ['preferred_psychologist_age_min', 'preferred_psychologist_age_max']
@@ -360,12 +359,10 @@ class QuickClientConsultationAnonymousSerializer(NormalizeListFieldsMixin, seria
                 raise serializers.ValidationError({field: "Это поле обязательно."})
         return data
 
-
 class AuthenticatedSessionRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = PsychologistSessionRequest
         fields = ["psychologist", "topic", "comments"]
-
 
 class AnonymousSessionRequestSerializer(serializers.ModelSerializer):
     class Meta:
@@ -574,22 +571,20 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     birth_date = serializers.DateField()
     gender = serializers.CharField()
-    communication_language = serializers.CharField()
+    communication_language = serializers.ListField(child=serializers.CharField(), required=False)
     telegram_id = serializers.SerializerMethodField()
     service_countries = serializers.ListField(child=serializers.CharField())
     service_cities = serializers.ListField(child=serializers.CharField())
     about_me_ru = serializers.CharField()
     catalog_description_ru = serializers.CharField()
-    qualification = serializers.CharField()
-    works_with = serializers.CharField()
-    problems_worked_with = serializers.CharField()
-    work_methods = serializers.CharField()
+    qualification = serializers.ListField(child=serializers.CharField(), required=False)
+    works_with = serializers.ListField(child=serializers.CharField(), required=False)
+    problems_worked_with = serializers.ListField(child=serializers.CharField(), required=False)
+    work_methods = serializers.ListField(child=serializers.CharField(), required=False)
     experience_years = serializers.IntegerField()
     academic_degree = serializers.CharField()
-    additional_psychologist_directions = serializers.CharField()
-    children_psychologist_directions = serializers.ListField(child=serializers.CharField(), required=False)
-    coach_directions = serializers.ListField(child=serializers.CharField(), required=False)
-    psychiatrist_directions = serializers.ListField(child=serializers.CharField(), required=False)
+    additional_psychologist_directions = serializers.ListField(child=serializers.CharField(), required=False)
+    additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
     associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
     education = serializers.ListField(child=serializers.CharField())
     education_files = EducationDocumentSerializer(many=True)
@@ -616,8 +611,7 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
             'communication_language', 'service_countries', 'service_cities', 'about_me_ru',
             'catalog_description_ru', 'qualification', 'works_with', 'problems_worked_with',
             'work_methods', 'experience_years', 'academic_degree', 'additional_psychologist_directions',
-            'children_psychologist_directions', 'coach_directions', 'psychiatrist_directions', 'associations_memberships',
-            'education', 'education_files', 'country',
+            'additional_specialization', 'associations_memberships', 'education', 'education_files', 'country',
             'city', 'office_address', 'office_photo_url', 'service_sessions', 'is_verified',
             'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'created_at', 'updated_at',
             'profile_picture_url'

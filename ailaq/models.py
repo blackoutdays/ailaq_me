@@ -233,16 +233,9 @@ class PsychologistApplication(models.Model):
     academic_degree = models.CharField(max_length=100, null=True, blank=True)
 
     # Дополнительные направления
+    additional_specialization = models.JSONField(default=list, blank=True, null=True)
+
     additional_psychologist_directions = models.JSONField(default=list, blank=True, null=True)
-
-    # Дополнительные направления для детских психологов
-    children_psychologist_directions = models.JSONField(default=list, blank=True, null=True)
-
-    # Направления для коучей
-    coach_directions = models.JSONField(default=list, blank=True, null=True)
-
-    # Направления для психиатров
-    psychiatrist_directions = models.JSONField(default=list, blank=True, null=True)
 
     # Членства в ассоциациях (с возможностью добавлять несколько)
     associations_memberships = models.JSONField(default=list, blank=True, null=True, help_text="Список ассоциаций")
