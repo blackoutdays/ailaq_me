@@ -1,6 +1,8 @@
+import base64
 import uuid
 from typing import Optional
 from django.contrib.auth import get_user_model, authenticate
+from django.core.files.base import ContentFile
 from rest_framework import serializers
 from ailaq.models import CustomUser, PsychologistApplication, PsychologistProfile, ClientProfile, PsychologistLevel, \
     Review, BuyRequest, Topic, QuickClientConsultationRequest, EducationDocument, PsychologistSessionRequest
@@ -440,6 +442,13 @@ class PsychologistChangePasswordSerializer(serializers.Serializer):
         user.save()
         return user
 
+
+class EducationBlockSerializer(serializers.Serializer):
+    title = serializers.CharField(required=False, allow_blank=True)
+    year = serializers.IntegerField(required=False, allow_null=True)
+    document = Base64FileField(required=False, allow_null=True)
+    file_signature = serializers.CharField(required=False, allow_blank=True)
+
 class EducationDocumentSerializer(serializers.ModelSerializer):
     document = serializers.FileField(required=True)
     year = serializers.IntegerField(required=False, allow_null=True)
@@ -758,23 +767,75 @@ class QualificationSerializer(serializers.ModelSerializer):
     additional_psychologist_directions = serializers.ListField(child=serializers.CharField(), required=False)
     additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
     associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
-    education = serializers.ListField(child=serializers.CharField())
+    education_block = serializers.ListField(child=EducationBlockSerializer(), required=False)
+
     country = serializers.CharField()
     city = serializers.CharField()
     district = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     street_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     building_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     office_photo = serializers.ImageField(required=False, allow_null=True)
-    education_files = EducationDocumentInputSerializer(many=True)
 
     class Meta:
         model = PsychologistApplication
         fields = [
             'qualification', 'works_with', 'problems_worked_with', 'work_methods',
             'experience_years', 'academic_degree', 'additional_psychologist_directions', 'additional_specialization', 'associations_memberships',
-            'education', 'country', 'city', 'district', 'street_name', 'building_number',
-            'office_photo', 'education_files'
+            'education_block', 'country', 'city', 'district', 'street_name', 'building_number',
+            'office_photo',
         ]
+
+    def to_representation(self, instance):
+        # Собираем education + education_files в единый список
+        base = []
+
+        # Из JSON поля
+        for item in instance.education or []:
+            if isinstance(item, dict):
+                base.append({"title": item.get("title"), "year": item.get("year")})
+
+        # Из файлов
+        for doc in instance.education_files.all():
+            base.append({
+                "title": doc.title,
+                "year": doc.year,
+                "file_signature": doc.file_signature,
+                "document": self.context.get("request").build_absolute_uri(doc.document.url)
+                if doc.document and self.context.get("request") else None
+            })
+
+        rep = super().to_representation(instance)
+        rep["education_block"] = base
+        return rep
+
+    def update(self, instance, validated_data):
+        education_block = validated_data.pop("education_block", [])
+
+        # Обновляем education (JSONField)
+        json_edu = []
+        for item in education_block:
+            if "document" not in item:
+                json_edu.append({"title": item.get("title"), "year": item.get("year")})
+        instance.education = json_edu
+
+        # Обновляем education_files (удаляем старые и добавляем новые)
+        instance.education_files.clear()
+        for item in education_block:
+            if item.get("document"):
+                format, data = item["document"].split(";base64,")
+                ext = format.split("/")[-1]
+                file = ContentFile(base64.b64decode(data), name=f"{item.get('title', 'file')}.{ext}")
+                doc = EducationDocument.objects.create(
+                    psychologist_application=instance,
+                    document=file,
+                    title=item.get("title", ""),
+                    year=item.get("year"),
+                    file_signature=item.get("file_signature", "")
+                )
+                instance.education_files.add(doc)
+
+        instance.save()
+        return super().update(instance, validated_data)
 
 class UserIdSerializer(serializers.ModelSerializer):
     telegram_id = serializers.CharField()
@@ -804,3 +865,4 @@ class UpdatePsychologistApplicationStatusSerializer(serializers.ModelSerializer)
         instance.status = validated_data.get('status', instance.status)
         instance.save()
         return instance
+
