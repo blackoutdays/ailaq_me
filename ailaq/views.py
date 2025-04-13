@@ -531,7 +531,18 @@ class PsychologistProfileView(APIView):
         tags=["Психолог"],
         summary="Получить полный профиль заявки психолога",
         description="Возвращает данные заявки психолога, включая личную информацию, квалификацию, услуги, FAQ и отзывы.",
-        responses={200: OpenApiResponse(description="Полная заявка психолога")}
+        responses={
+            200: inline_serializer(
+                name="PsychologistFullProfile",
+                fields={
+                    "personal_info": PersonalInfoSerializer(),
+                    "qualification": QualificationSerializer(),
+                    "service_price": ServicePriceSerializer(),
+                    "faq": FAQListSerializer(),
+                    "reviews": ReviewSerializer(many=True),
+                }
+            )
+        }
     )
     def get(self, request):
         try:

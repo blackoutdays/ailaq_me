@@ -500,7 +500,6 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(picture.url)
         return None
 
-
 class PsychologistApplicationSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     birth_date = serializers.DateField()
@@ -524,6 +523,9 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
     education_files = EducationDocumentSerializer(many=True)
     country = serializers.CharField()
     city = serializers.CharField()
+    district = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    street_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    building_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     office_address = serializers.CharField()
     office_photo_url = serializers.SerializerMethodField()
     service_sessions = serializers.ListField(child=serializers.DictField())
@@ -546,7 +548,7 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
             'catalog_description_ru', 'qualification', 'works_with', 'problems_worked_with',
             'work_methods', 'experience_years', 'academic_degree', 'additional_psychologist_directions',
             'additional_specialization', 'associations_memberships', 'education', 'education_files', 'country',
-            'city', 'office_address', 'office_photo_url', 'service_sessions', 'is_verified',
+            'city', 'district', 'street_name', 'building_number', 'office_address', 'office_photo_url', 'service_sessions', 'is_verified',
             'is_in_catalog', 'rating_system', 'internal_rating', 'status', 'created_at', 'updated_at',
             'profile_picture_url'
         ]
@@ -753,7 +755,13 @@ class QualificationSerializer(serializers.ModelSerializer):
     work_methods = serializers.ListField(child=serializers.CharField(), required=False)
     experience_years = serializers.IntegerField()
     academic_degree = serializers.CharField(allow_null=True)
+    additional_psychologist_directions = serializers.ListField(child=serializers.CharField(), required=False)
+    additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
+    associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
     education = serializers.ListField(child=serializers.CharField())
+    district = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    street_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    building_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     office_photo = serializers.ImageField(required=False, allow_null=True)
     education_files = EducationDocumentInputSerializer(many=True)
 
@@ -761,7 +769,8 @@ class QualificationSerializer(serializers.ModelSerializer):
         model = PsychologistApplication
         fields = [
             'qualification', 'works_with', 'problems_worked_with', 'work_methods',
-            'experience_years', 'academic_degree', 'education',
+            'experience_years', 'academic_degree', 'additional_psychologist_directions', 'additional_specialization', 'associations_memberships',
+            'education', 'district', 'street_name', 'building_number',
             'office_photo', 'education_files'
         ]
 
