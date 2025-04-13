@@ -759,6 +759,8 @@ class QualificationSerializer(serializers.ModelSerializer):
     additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
     associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
     education = serializers.ListField(child=serializers.CharField())
+    country = serializers.CharField()
+    city = serializers.CharField()
     district = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     street_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     building_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -770,7 +772,7 @@ class QualificationSerializer(serializers.ModelSerializer):
         fields = [
             'qualification', 'works_with', 'problems_worked_with', 'work_methods',
             'experience_years', 'academic_degree', 'additional_psychologist_directions', 'additional_specialization', 'associations_memberships',
-            'education', 'district', 'street_name', 'building_number',
+            'education', 'country', 'city', 'district', 'street_name', 'building_number',
             'office_photo', 'education_files'
         ]
 
