@@ -727,7 +727,8 @@ class PersonalInfoSerializer(serializers.ModelSerializer):
             'first_name_ru', 'last_name_ru', 'middle_name_ru',
             'birth_date', 'gender', 'communication_language',
             'service_countries', 'service_cities', 'telegram_id',
-            'about_me_ru', 'catalog_description_ru', 'profile_picture_url'
+            'about_me_ru', 'catalog_description_ru', 'profile_picture_url', 
+            'profile_picture'
         ]
 
     def get_telegram_id(self, obj):
