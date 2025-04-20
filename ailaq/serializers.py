@@ -574,8 +574,8 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         return None
 
     def get_office_photo_url(self, obj):
-        request = self.context.get('request')
-        if obj.office_photo and request:
+        request = self.context.get("request")
+        if hasattr(obj, "office_photo") and obj.office_photo and request:
             return request.build_absolute_uri(obj.office_photo.url)
         return None
 
@@ -887,7 +887,7 @@ class QualificationSerializer(serializers.ModelSerializer):
 
     def get_office_photo_url(self, obj):
         request = self.context.get("request")
-        if obj.office_photo and request:
+        if hasattr(obj, "office_photo") and obj.office_photo and request:
             return request.build_absolute_uri(obj.office_photo.url)
         return None
 
