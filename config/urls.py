@@ -58,7 +58,6 @@ urlpatterns = [
 
     path('api/psychologists/<int:psychologist_id>/qualification/', PublicQualificationView.as_view(), name='public-qualification'),
     path('api/psychologists/<int:psychologist_id>/service_price/', PublicServicePriceView.as_view(), name='public-service-price'),
-    path("api/psychologist/service_sessions/<str:session_id>/", ServicePriceView.as_view(), name="service-session-detail"),
     path('api/psychologists/<int:psychologist_id>/reviews/', PublicReviewListView.as_view(), name='public-reviews'),
     path('api/psychologists/<int:psychologist_id>/faq/', PublicFAQView.as_view(), name='public-faq'),
     path('api/psychologists/<int:psychologist_id>/profile/', PublicPsychologistProfileView.as_view(), name='public-psychologist-profile'),

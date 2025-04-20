@@ -587,18 +587,16 @@ class PsychologistApplicationSerializer(serializers.ModelSerializer):
         return obj.user.telegram_id
 
 class SessionItemSerializer(serializers.Serializer):
-    id = serializers.CharField(read_only=True)
     session_type = serializers.CharField()
     online_offline = serializers.CharField()
-    country = serializers.CharField(max_length=100)
-    city = serializers.CharField(max_length=100)
+    country = serializers.CharField()
+    city = serializers.CharField()
     duration = serializers.IntegerField(min_value=1)
-    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
+    price = serializers.FloatField(min_value=0)
     currency = serializers.CharField()
 
     def to_representation(self, instance):
         result = dict(instance)
-        result["price"] = float(result.get("price", 0))
         result["location"] = f"{result.get('country', '')}, {result.get('city', '')}".strip(", ")
         return result
 

@@ -660,7 +660,6 @@ class QualificationView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-# Сохранение и получение стоимости услуг
 class ServicePriceView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -672,87 +671,55 @@ class ServicePriceView(APIView):
     def get(self, request):
         application = get_object_or_404(PsychologistApplication, user=request.user)
         serializer = ServicePriceSerializer(application)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.data)
 
     @extend_schema(
         tags=["Психолог"],
-        summary="Добавить одну или несколько услуг (сессий)",
+        summary="Добавить сессии (дополнительно к текущим)",
         request=ServicePriceSerializer,
         responses={200: ServicePriceSerializer}
     )
     def post(self, request):
         application = get_object_or_404(PsychologistApplication, user=request.user)
-        session_data = request.data.get("service_sessions")
+        new_sessions = request.data.get("service_sessions", [])
 
-        if not isinstance(session_data, list):
-            return Response({"error": "Ожидался массив сессий."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(new_sessions, list):
+            return Response({"error": "Ожидался массив сессий."}, status=400)
 
-        sessions = application.service_sessions or []
-
-        for session in session_data:
-            if "id" not in session:
-                session["id"] = str(uuid.uuid4())
-            session["price"] = float(session["price"])
-            sessions.append(session)
-
-        application.service_sessions = sessions
+        combined = (application.service_sessions or []) + new_sessions
+        application.service_sessions = combined
         application.save(update_fields=["service_sessions"])
 
-        serializer = ServicePriceSerializer(application)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(ServicePriceSerializer(application).data)
 
     @extend_schema(
         tags=["Психолог"],
-        summary="Обновить все сессии (заменяет весь массив)",
+        summary="Полностью заменить все сессии",
         request=ServicePriceSerializer,
         responses={200: ServicePriceSerializer}
     )
     def put(self, request):
         application = get_object_or_404(PsychologistApplication, user=request.user)
-        session_data = request.data.get("service_sessions")
+        new_sessions = request.data.get("service_sessions", [])
 
-        if not isinstance(session_data, list):
-            return Response({"error": "Ожидался массив сессий."}, status=status.HTTP_400_BAD_REQUEST)
-
-        new_sessions = []
-        for session in session_data:
-            if "id" not in session:
-                session["id"] = str(uuid.uuid4())
-            session["price"] = float(session["price"])
-            new_sessions.append(session)
+        if not isinstance(new_sessions, list):
+            return Response({"error": "Ожидался массив сессий."}, status=400)
 
         application.service_sessions = new_sessions
         application.save(update_fields=["service_sessions"])
 
-        serializer = ServicePriceSerializer(application)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(ServicePriceSerializer(application).data)
 
     @extend_schema(
         tags=["Психолог"],
-        summary="Удалить несколько сессий по id",
-        request=inline_serializer(
-            name="DeleteSessionsRequest",
-            fields={
-                "ids": serializers.ListField(child=serializers.CharField())
-            }
-        ),
-        responses={204: OpenApiResponse(description="Сессии удалены")}
+        summary="Удаляет все сессии (обнуление)",
+        responses={204: OpenApiResponse(description="Все сессии удалены")}
     )
     def delete(self, request):
         application = get_object_or_404(PsychologistApplication, user=request.user)
-        ids_to_delete = request.data.get("ids", [])
-        if not isinstance(ids_to_delete, list):
-            return Response({"error": "Ожидается список ID."}, status=status.HTTP_400_BAD_REQUEST)
-
-        old_sessions = application.service_sessions or []
-        new_sessions = [s for s in old_sessions if str(s.get("id")) not in ids_to_delete]
-
-        if len(new_sessions) == len(old_sessions):
-            return Response({"error": "Ни одна сессия не удалена."}, status=status.HTTP_404_NOT_FOUND)
-
-        application.service_sessions = new_sessions
+        application.service_sessions = []
         application.save(update_fields=["service_sessions"])
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(status=204)
 
 
 # Сохранение и получение FAQ психолога
