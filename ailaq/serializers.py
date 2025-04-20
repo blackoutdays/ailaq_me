@@ -810,7 +810,7 @@ class QualificationSerializer(serializers.ModelSerializer):
     additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
     associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
     education_block = serializers.ListField(child=EducationBlockSerializer(), required=False)
-    office_photo = Base64ImageField(write_only=True, required=False)
+    office_photo = serializers.ImageField(write_only=True, required=False)
     office_photo_url = serializers.SerializerMethodField()
 
     office_info = serializers.ListField(
