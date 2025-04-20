@@ -639,6 +639,38 @@ class ServicePriceSerializer(serializers.ModelSerializer):
         }
 
 # загрузка доков
+class EducationBlockUpdateSerializer(serializers.Serializer):
+    education_block = serializers.ListField(child=EducationBlockSerializer())
+
+    def update(self, instance, validated_data):
+        education_block = validated_data.get("education_block", [])
+
+        # Обновляем education (JSONField)
+        json_edu = []
+        for item in education_block:
+            if "document" not in item:
+                json_edu.append({"title": item.get("title"), "year": item.get("year")})
+        instance.education = json_edu
+
+        # Обновляем education_files (удаляем старые и добавляем новые)
+        instance.education_files.clear()
+        for item in education_block:
+            if item.get("document"):
+                format, data = item["document"].split(";base64,")
+                ext = format.split("/")[-1]
+                file = ContentFile(base64.b64decode(data), name=f"{item.get('title', 'file')}.{ext}")
+                doc = EducationDocument.objects.create(
+                    psychologist_application=instance,
+                    document=file,
+                    title=item.get("title", ""),
+                    year=item.get("year"),
+                    file_signature=item.get("file_signature", "")
+                )
+                instance.education_files.add(doc)
+
+        instance.save()
+        return instance
+
 class DocumentSerializer(serializers.ModelSerializer):
     office_photo = serializers.ImageField(required=False, allow_null=True)
     education_files = serializers.ListField(
@@ -769,21 +801,21 @@ class QualificationSerializer(serializers.ModelSerializer):
     additional_specialization = serializers.ListField(child=serializers.CharField(), required=False)
     associations_memberships = serializers.ListField(child=serializers.CharField(), required=False)
     education_block = serializers.ListField(child=EducationBlockSerializer(), required=False)
+    office_photo = Base64ImageField(write_only=True, required=False)
+    office_photo_url = serializers.SerializerMethodField()
 
-    country = serializers.CharField()
-    city = serializers.CharField()
-    district = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    street_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    building_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    office_photo = serializers.ImageField(required=False, allow_null=True)
+
+    office_info = serializers.ListField(
+        child=serializers.DictField(child=serializers.CharField(allow_blank=True)),
+        required=False
+    )
 
     class Meta:
         model = PsychologistApplication
         fields = [
             'qualification', 'works_with', 'problems_worked_with', 'work_methods',
             'experience_years', 'academic_degree', 'additional_psychologist_directions', 'additional_specialization', 'associations_memberships',
-            'education_block', 'country', 'city', 'district', 'street_name', 'building_number',
-            'office_photo',
+            'education_block', 'office_info', "office_photo", "office_photo_url"
         ]
 
     def to_representation(self, instance):
@@ -807,10 +839,17 @@ class QualificationSerializer(serializers.ModelSerializer):
 
         rep = super().to_representation(instance)
         rep["education_block"] = base
+        rep["office_info"] = instance.office_info
         return rep
 
     def update(self, instance, validated_data):
         education_block = validated_data.pop("education_block", [])
+        office_info = validated_data.pop("office_info", None)
+        office_photo = validated_data.pop("office_photo", None)
+        if office_photo:
+            instance.office_photo = office_photo
+        if office_info is not None:
+            instance.office_info = office_info
 
         # Обновляем education (JSONField)
         json_edu = []
@@ -837,6 +876,12 @@ class QualificationSerializer(serializers.ModelSerializer):
 
         instance.save()
         return super().update(instance, validated_data)
+
+    def get_office_photo_url(self, obj):
+        request = self.context.get("request")
+        if obj.office_photo and request:
+            return request.build_absolute_uri(obj.office_photo.url)
+        return None
 
 class UserIdSerializer(serializers.ModelSerializer):
     telegram_id = serializers.CharField()

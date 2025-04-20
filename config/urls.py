@@ -6,15 +6,16 @@ from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from ailaq.views import (
-     PsychologistProfileView, AdminApprovePsychologistView,
-    QualificationView, PersonalInfoView, FAQView, DocumentView, ReviewCreateView,
+    PsychologistProfileView, AdminApprovePsychologistView,
+    QualificationView, PersonalInfoView, FAQView, ReviewCreateView,
     ReviewListView, TelegramAuthView, CatalogViewSet, ServicePriceView,
-    PublicPsychologistProfileView,PsychologistApplicationViewSet,
+    PublicPsychologistProfileView, PsychologistApplicationViewSet,
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
-    QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView, ServicePriceSessionDetailView,
+    QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView,
+    ServicePriceSessionDetailView,
     AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView, UploadProfilePhotoView,
     LoginView, RegisterUserView, ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
-    PsychologistChangePasswordView
+    PsychologistChangePasswordView, EducationBlockUpdateView
 )
 from django.urls import path
 from ailaq.views import UserListView
@@ -73,7 +74,7 @@ urlpatterns = [
     path('api/psychologist/profile/faq/', FAQView.as_view(), name='faq'),
     path('api/psychologist/profile/upload-photo/', UploadProfilePhotoView.as_view(), name='upload_profile_photo'),
 
-    path('api/psychologist/profile/documents/', DocumentView.as_view(), name='documents'),
+    path("api/psychologist/profile/education/", EducationBlockUpdateView.as_view(), name="education-block-update"),
     path('api/users/', UserListView.as_view(), name='user-list'),
 
     # Отзывы (Получение и создание)

@@ -246,16 +246,7 @@ class PsychologistApplication(models.Model):
     # Документы об образовании
     education_files = models.ManyToManyField('EducationDocument', blank=True, related_name='applications')
 
-    # Адрес офиса
-    country = models.CharField(max_length=100, null=True, blank=True, verbose_name="Страна")
-    city = models.CharField(max_length=100, null=True, blank=True, verbose_name="Город")
-    district = models.CharField(max_length=100, null=True, blank=True, verbose_name="Район")
-    street_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="Улица")
-    building_number = models.CharField(max_length=50, null=True, blank=True, verbose_name="Номер дома")
-    office_address = models.TextField(null=True, blank=True, verbose_name="Полный адрес офиса")
-
-    # Фото офиса
-    office_photo = models.ImageField(upload_to='office_photos/', null=True, blank=True)
+    office_info = models.JSONField(default=list, blank=True, null=True, verbose_name="Офис(а): адрес + фото")
 
     SESSION_TYPES = [
         ('INDIVIDUAL', 'Индивидуальная консультация'),

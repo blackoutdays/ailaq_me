@@ -1,11 +1,9 @@
-import base64
 import hmac
 import uuid
 from hashlib import sha256
-from django.core.files.base import ContentFile
 from rest_framework import generics
 from rest_framework.decorators import action
-from .serializers import UserIdSerializer
+from .serializers import UserIdSerializer, EducationBlockUpdateSerializer
 from asgiref.sync import async_to_sync
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -29,7 +27,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter, OpenApiTypes, inline_serializer
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter, inline_serializer
 from config import settings
 from .models import PsychologistProfile, PsychologistApplication, ClientProfile, CustomUser, \
     PsychologistFAQ, Review, QuickClientConsultationRequest, Topic, EducationDocument
@@ -650,29 +648,6 @@ class QualificationView(APIView):
 
             if serializer.is_valid():
                 serializer.save()
-
-                education_files = serializer.validated_data.get('education_files', [])
-
-                for file_data in education_files:
-                    document_base64 = file_data.get('document')
-                    title = file_data.get('title', 'Документ')
-                    year = file_data.get('year')
-                    file_signature = file_data.get('file_signature', '')
-
-                    if document_base64:
-                        format, data = document_base64.split(';base64,')
-                        ext = format.split('/')[-1]
-                        file = ContentFile(base64.b64decode(data), name=f"{title}.{ext}")
-
-                        EducationDocument.objects.create(
-                            psychologist_application=application,
-                            document=file,
-                            title=title,
-                            year=year,
-                            file_signature=file_signature
-                        )
-
-                application.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -839,37 +814,29 @@ class FAQView(APIView):
             logger.error(f"Ошибка при сохранении FAQ: {str(e)}")
             return Response({"error": "Не удалось сохранить FAQ."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Загрузка документов
-class DocumentView(APIView):
+class EducationBlockUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
         tags=["Психолог"],
-        request=DocumentSerializer,
-        responses={200: DocumentSerializer}
+        summary="Обновить блок образования",
+        description="Обновляет JSON-поле education и файлы education_files (в одном endpoint).",
+        request=EducationBlockUpdateSerializer,
+        responses={200: OpenApiResponse(description="Образование успешно обновлено")},
     )
     def post(self, request):
         try:
             application = get_object_or_404(PsychologistApplication, user=request.user)
-
-            if "document" not in request.FILES:
-                return Response({"error": "Файл не загружен."}, status=status.HTTP_400_BAD_REQUEST)
-
-            serializer = DocumentSerializer(application, data=request.data, partial=True)
-
-            if serializer.is_valid():
-                document = request.FILES["document"]
-                EducationDocument.objects.create(
-                    psychologist_application=application,
-                    document=document,
-                    title=document.name
-                )
-                return Response({"message": "Документ загружен."}, status=status.HTTP_201_CREATED)
-
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        except PsychologistApplication.DoesNotExist:
-            return Response({"error": "Профиль не найден."}, status=status.HTTP_404_NOT_FOUND)
+            serializer = EducationBlockUpdateSerializer(data=request.data, context={"request": request})
+            serializer.is_valid(raise_exception=True)
+            serializer.update(application, serializer.validated_data)
+            return Response({"detail": "Образование успешно обновлено."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении блока образования: {str(e)}")
+            return Response(
+                {"error": "Не удалось обновить образование", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class ReviewListView(APIView):
     """ Получение списка отзывов о психологе """
@@ -1382,3 +1349,4 @@ class AdminApprovePsychologistView(APIView):
         except Exception as e:
             logger.error(f"❌ Ошибка при обновлении статуса заявки: {str(e)}")
             return Response({"detail": "Ошибка сервера."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
