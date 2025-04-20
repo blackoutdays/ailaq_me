@@ -6,16 +6,15 @@ from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from ailaq.views import (
-    PsychologistProfileView, AdminApprovePsychologistView,
+     PsychologistProfileView, AdminApprovePsychologistView,
     QualificationView, PersonalInfoView, FAQView, ReviewCreateView,
     ReviewListView, TelegramAuthView, CatalogViewSet, ServicePriceView,
-    PublicPsychologistProfileView, PsychologistApplicationViewSet,
+    PublicPsychologistProfileView,PsychologistApplicationViewSet,
     PsychologistSelfProfileView, PublicQualificationView, PublicReviewListView, PublicFAQView, PublicServicePriceView,
-    QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView,
-    ServicePriceSessionDetailView,
+    QuickClientConsultationAPIView, ClientMeViewSet, TelegramAuthPageView, QuickClientConsultationAnonymousAPIView, ServicePriceView,
     AuthenticatedPsychologistSessionRequestView, AnonymousPsychologistSessionRequestView, UploadProfilePhotoView,
     LoginView, RegisterUserView, ResendVerificationEmailView, ConfirmEmailView, ChangePasswordView,
-    PsychologistChangePasswordView, EducationBlockUpdateView
+    PsychologistChangePasswordView
 )
 from django.urls import path
 from ailaq.views import UserListView
@@ -59,7 +58,7 @@ urlpatterns = [
 
     path('api/psychologists/<int:psychologist_id>/qualification/', PublicQualificationView.as_view(), name='public-qualification'),
     path('api/psychologists/<int:psychologist_id>/service_price/', PublicServicePriceView.as_view(), name='public-service-price'),
-    path("api/psychologist/service_sessions/<str:session_id>/", ServicePriceSessionDetailView.as_view(), name="service-session-detail"),
+    path("api/psychologist/service_sessions/<str:session_id>/", ServicePriceView.as_view(), name="service-session-detail"),
     path('api/psychologists/<int:psychologist_id>/reviews/', PublicReviewListView.as_view(), name='public-reviews'),
     path('api/psychologists/<int:psychologist_id>/faq/', PublicFAQView.as_view(), name='public-faq'),
     path('api/psychologists/<int:psychologist_id>/profile/', PublicPsychologistProfileView.as_view(), name='public-psychologist-profile'),
@@ -74,7 +73,6 @@ urlpatterns = [
     path('api/psychologist/profile/faq/', FAQView.as_view(), name='faq'),
     path('api/psychologist/profile/upload-photo/', UploadProfilePhotoView.as_view(), name='upload_profile_photo'),
 
-    path("api/psychologist/profile/education/", EducationBlockUpdateView.as_view(), name="education-block-update"),
     path('api/users/', UserListView.as_view(), name='user-list'),
 
     # Отзывы (Получение и создание)
