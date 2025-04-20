@@ -797,8 +797,9 @@ class OfficeInfoItemSerializer(serializers.Serializer):
     street_name = serializers.CharField(required=False, allow_blank=True)
     building_number = serializers.CharField(required=False, allow_blank=True)
     office_phone = serializers.CharField(required=False, allow_blank=True)
-    photo = serializers.URLField(required=False, allow_blank=True)
-
+    photos = serializers.ListField(
+        child=Base64ImageField(), required=False
+    )
 class QualificationSerializer(serializers.ModelSerializer):
     qualification = serializers.CharField()
     works_with = serializers.ListField(child=serializers.CharField(), required=False)

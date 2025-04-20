@@ -247,7 +247,7 @@ class PsychologistApplication(models.Model):
     education_files = models.ManyToManyField('EducationDocument', blank=True, related_name='applications')
 
     office_info = models.JSONField(default=list, blank=True, null=True, verbose_name="Офис(а): адрес + фото")
-    office_photo = models.ImageField(upload_to='office_photos/', null=True, blank=True)
+    office_info = models.JSONField(default=list, blank=True, null=True)
 
     SESSION_TYPES = [
         ('INDIVIDUAL', 'Индивидуальная консультация'),
