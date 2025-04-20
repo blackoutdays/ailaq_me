@@ -2,6 +2,7 @@ import hmac
 import uuid
 from hashlib import sha256
 from rest_framework import generics
+from rest_framework import serializers
 from rest_framework.decorators import action
 from .serializers import UserIdSerializer, EducationBlockUpdateSerializer
 from asgiref.sync import async_to_sync
@@ -675,24 +676,24 @@ class ServicePriceView(APIView):
 
     @extend_schema(
         tags=["Психолог"],
-        summary="Добавить одну услугу (сессию)",
-        request=SessionItemSerializer,
+        summary="Добавить одну или несколько услуг (сессий)",
+        request=ServicePriceSerializer,
         responses={200: ServicePriceSerializer}
     )
     def post(self, request):
         application = get_object_or_404(PsychologistApplication, user=request.user)
-        session_data = request.data
+        session_data = request.data.get("service_sessions")
 
-        if not isinstance(session_data, dict):
-            return Response({"error": "Ожидалась одна сессия, как объект."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(session_data, list):
+            return Response({"error": "Ожидался массив сессий."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Генерируем UUID
-        if "id" not in session_data:
-            session_data["id"] = str(uuid.uuid4())
-
-        # Добавляем к текущим
         sessions = application.service_sessions or []
-        sessions.append(session_data)
+
+        for session in session_data:
+            if "id" not in session:
+                session["id"] = str(uuid.uuid4())
+            session["price"] = float(session["price"])
+            sessions.append(session)
 
         application.service_sessions = sessions
         application.save(update_fields=["service_sessions"])
@@ -700,70 +701,59 @@ class ServicePriceView(APIView):
         serializer = ServicePriceSerializer(application)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-class ServicePriceSessionDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
     @extend_schema(
         tags=["Психолог"],
-        summary="Получить одну услугу по ID",
-        responses={200: SessionItemSerializer}
+        summary="Обновить все сессии (заменяет весь массив)",
+        request=ServicePriceSerializer,
+        responses={200: ServicePriceSerializer}
     )
-    def get(self, request, session_id):
+    def put(self, request):
         application = get_object_or_404(PsychologistApplication, user=request.user)
-        sessions = application.service_sessions or []
+        session_data = request.data.get("service_sessions")
 
-        session = next((s for s in sessions if str(s.get("id")) == str(session_id)), None)
-        if not session:
-            return Response({"error": "Сессия не найдена"}, status=status.HTTP_404_NOT_FOUND)
+        if not isinstance(session_data, list):
+            return Response({"error": "Ожидался массив сессий."}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(session, status=status.HTTP_200_OK)
+        new_sessions = []
+        for session in session_data:
+            if "id" not in session:
+                session["id"] = str(uuid.uuid4())
+            session["price"] = float(session["price"])
+            new_sessions.append(session)
 
-    @extend_schema(
-        tags=["Психолог"],
-        summary="Обновить услугу по ID",
-        request=SessionItemSerializer,
-        responses={200: SessionItemSerializer}
-    )
-    def put(self, request, session_id):
-        application = get_object_or_404(PsychologistApplication, user=request.user)
-        sessions = application.service_sessions or []
-
-        updated = False
-        new_data = request.data
-
-        for idx, session in enumerate(sessions):
-            if str(session.get("id")) == str(session_id):
-                sessions[idx] = {**session, **new_data, "id": session_id}
-                updated = True
-                break
-
-        if not updated:
-            return Response({"error": "Сессия не найдена"}, status=status.HTTP_404_NOT_FOUND)
-
-        application.service_sessions = sessions
+        application.service_sessions = new_sessions
         application.save(update_fields=["service_sessions"])
-        return Response(sessions[idx], status=status.HTTP_200_OK)
+
+        serializer = ServicePriceSerializer(application)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
         tags=["Психолог"],
-        summary="Удалить услугу по ID",
-        responses={204: None}
+        summary="Удалить несколько сессий по id",
+        request=inline_serializer(
+            name="DeleteSessionsRequest",
+            fields={
+                "ids": serializers.ListField(child=serializers.CharField())
+            }
+        ),
+        responses={204: OpenApiResponse(description="Сессии удалены")}
     )
-    def delete(self, request, session_id):
+    def delete(self, request):
         application = get_object_or_404(PsychologistApplication, user=request.user)
-        sessions = application.service_sessions or []
+        ids_to_delete = request.data.get("ids", [])
+        if not isinstance(ids_to_delete, list):
+            return Response({"error": "Ожидается список ID."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Приводим session_id к строке, т.к. id внутри сессий — строки
-        session_id = str(session_id)
+        old_sessions = application.service_sessions or []
+        new_sessions = [s for s in old_sessions if str(s.get("id")) not in ids_to_delete]
 
-        new_sessions = [s for s in sessions if str(s.get("id")) != session_id]
-
-        if len(new_sessions) == len(sessions):
-            return Response({"error": "Сессия не найдена"}, status=status.HTTP_404_NOT_FOUND)
+        if len(new_sessions) == len(old_sessions):
+            return Response({"error": "Ни одна сессия не удалена."}, status=status.HTTP_404_NOT_FOUND)
 
         application.service_sessions = new_sessions
         application.save(update_fields=["service_sessions"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 # Сохранение и получение FAQ психолога
 class FAQView(APIView):
