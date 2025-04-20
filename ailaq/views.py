@@ -15,10 +15,6 @@ from django.utils.crypto import get_random_string
 from datetime import timedelta
 from django.db import transaction
 from . import models
-from .serializers import RegisterSerializer, ChangePasswordSerializer, \
-    AuthenticatedQuickClientConsultationRequestSerializer, \
-    QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
-    PsychologistChangePasswordSerializer
 from django.utils.timezone import now
 from django.shortcuts import get_object_or_404, render
 from rest_framework import status, viewsets
@@ -30,10 +26,14 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter, inline_serializer
 from config import settings
 from .models import PsychologistProfile, PsychologistApplication, ClientProfile, CustomUser, \
-    PsychologistFAQ, Review, QuickClientConsultationRequest, Topic, EducationDocument
+    PsychologistFAQ, Review, QuickClientConsultationRequest, Topic
 from .serializers import (
+    RegisterSerializer, ChangePasswordSerializer, \
+    AuthenticatedQuickClientConsultationRequestSerializer, \
+    QuickClientConsultationRequestSerializer, QuickClientConsultationAnonymousSerializer, SessionItemSerializer, \
+    PsychologistChangePasswordSerializer,
     LoginSerializer, PsychologistApplicationSerializer, ClientProfileSerializer, ReviewSerializer, CatalogSerializer,
-    PersonalInfoSerializer, QualificationSerializer, DocumentSerializer,
+    PersonalInfoSerializer, QualificationSerializer,
     FAQListSerializer, TopicSerializer,
     ServicePriceSerializer, PsychologistProfileSerializer
 )
