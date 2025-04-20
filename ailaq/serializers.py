@@ -814,7 +814,7 @@ class QualificationSerializer(serializers.ModelSerializer):
     office_photo_url = serializers.SerializerMethodField()
 
     office_info = serializers.ListField(
-        child=OfficeInfoItemSerializer(),
+        child=serializers.DictField(child=serializers.CharField(), required=False),
         required=False
     )
 
