@@ -115,7 +115,7 @@ async def handle_accept_callback(update, context):
                 )
                 await bot.send_message(
                     chat_id=query.from_user.id,
-                    text="⛔️ Эта заявка уже была принята другим психологом."
+                    text="Эта заявка уже была принята другим психологом."
                 )
                 return
 
@@ -149,9 +149,9 @@ async def handle_accept_callback(update, context):
         # Get client info
         session_user = await sync_to_async(User.objects.filter(telegram_id=session.telegram_id).first)()
         telegram_info = (
-            f"🌐 Telegram: @{session_user.username}"
+            f"Telegram: @{session_user.username}"
             if session_user and session_user.username
-            else f"🌐 Telegram ID: {session.telegram_id}"
+            else f"Telegram ID: {session.telegram_id}"
         )
 
         # Notify the psychologist
@@ -159,17 +159,17 @@ async def handle_accept_callback(update, context):
             chat_id=query.from_user.id,
             text=(
                 f"📢 Вы приняли заявку!\n"
-                f"👤 Клиент: {session.client_name}\n"
+                f"Клиент: {session.client_name}\n"
                 f"{telegram_info}\n"
-                f"🧠 Тема: {session.topic}\n"
-                f"💬 {session.comments or 'нет'}"
+                f"Тема: {session.topic}\n"
+                f"{session.comments or 'нет'}"
             )
         )
 
         # Send inline keyboard for status update
         await bot.send_message(
             chat_id=query.from_user.id,
-            text="📋 Обновите статус заявки:",
+            text="Обновите статус заявки:",
             reply_markup=build_status_update_keyboard(session.id)
         )
 
@@ -244,12 +244,12 @@ async def notify_psychologist_telegram(session_request):
 
         text = (
             f"📥 Новая заявка от клиента!\n"
-            f"👤 Имя: {session_request.client_name}\n"
-            f"📅 Возраст: {age_display}\n"
-            f"🧠 Тема: {problem_display}\n"
-            f"📊 Пол: {gender_display}\n"
+            f"Имя: {session_request.client_name}\n"
+            f"Возраст: {age_display}\n"
+            f"Тема: {problem_display}\n"
+            f"Пол: {gender_display}\n"
             f"💬 Комментарий: {session_request.comments or 'нет'}\n"
-            f"🗣️ Язык клиента: {language_display}"  # Отображаем язык
+            f"Язык клиента: {language_display}"  # Отображаем язык
         )
 
         # Кнопки для принятия заявки
@@ -298,7 +298,7 @@ async def link_telegram_user(update, context):
         await update.message.reply_text("Вы уже привязаны к системе.")
     else:
         await update.message.reply_text(
-            "👤 Мы не нашли вас в системе.\n"
+            "Мы не нашли вас в системе.\n"
             "Если вы хотите пользоваться платформой как клиент или психолог, пожалуйста, зарегистрируйтесь: "
             f"{settings.FRONTEND_URL}/register"
         )
@@ -346,9 +346,9 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
         # Получить Telegram username клиента (если есть)
         session_user = await sync_to_async(User.objects.filter(telegram_id=session.telegram_id).first)()
         telegram_info = (
-            f"🌐 Telegram: @{session_user.username}"
+            f"Telegram: @{session_user.username}"
             if session_user and session_user.username
-            else f"🌐 Telegram ID: {session.telegram_id}"
+            else f"Telegram ID: {session.telegram_id}"
         )
 
         # Отправка данных психологу
@@ -356,10 +356,10 @@ async def handle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
             chat_id=query.from_user.id,
             text=(
                 f"📢 Вы приняли заявку!\n"
-                f"👤 Клиент: {session.client_name}\n"
+                f"Клиент: {session.client_name}\n"
                 f"{telegram_info}\n"
-                f"🧠 Тема: {session.topic}\n"
-                f"💬 {session.comments or 'нет'}"
+                f"Тема: {session.topic}\n"
+                f"{session.comments or 'нет'}"
             )
         )
 
@@ -421,7 +421,7 @@ async def process_review(update, context):
             request_obj = await sync_to_async(request_obj.latest)("created_at")
             review_type = "consultation"
         except QuickClientConsultationRequest.DoesNotExist:
-            await update.message.reply_text("😔 У вас нет завершённых сессий без отзыва.")
+            await update.message.reply_text("У вас нет завершённых сессий без отзыва.")
             return
 
     if message_text.isdigit() and 1 <= int(message_text) <= 5:
@@ -431,7 +431,7 @@ async def process_review(update, context):
             "review_type": review_type,
         }
         name = request_obj.taken_by.user.full_name if request_obj.taken_by else "психолог"
-        await update.message.reply_text(f"📝 Введите текст отзыва для {name}.", parse_mode="Markdown")
+        await update.message.reply_text(f"Введите текст отзыва для {name}.", parse_mode="Markdown")
     elif telegram_id in pending_reviews:
         data = pending_reviews[telegram_id]
         request_obj = data["request_obj"]
@@ -492,10 +492,10 @@ async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_telegram_message(
             psychologist.user.telegram_id,
             f"✅ Вы приняли заявку от клиента: {consultation.client_name}\n"
-            f"📩 Telegram клиента: @{client_profile.user.username}" if client_profile.user.username else f"📩 Telegram ID: {consultation.telegram_id}\n"
-            f"👤 Возраст: {consultation.age}, Пол: {consultation.gender}\n"
-            f"🧠 Тема: {consultation.topic}\n"
-            f"💬 Комментарий: {consultation.comments}"
+            f"Telegram клиента: @{client_profile.user.username}" if client_profile.user.username else f"📩 Telegram ID: {consultation.telegram_id}\n"
+            f"Возраст: {consultation.age}, Пол: {consultation.gender}\n"
+            f"Тема: {consultation.topic}\n"
+            f"Комментарий: {consultation.comments}"
         )
 
         await send_telegram_message(
@@ -506,7 +506,7 @@ async def accept_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await send_telegram_message(
             consultation.telegram_id,
-            "🤝 Вашу заявку принял психолог. Сессия скоро начнётся."
+            "Вашу заявку принял психолог. Сессия скоро начнётся."
         )
 
     except Exception as e:
@@ -546,7 +546,7 @@ async def my_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not active.exists():
         await update.message.reply_text("У вас нет активных заявок.")
         return
-    text = "📋 Ваши активные заявки:\n"
+    text = "Ваши активные заявки:\n"
     for req in active:
         text += f"ID: {req.id}, Клиент: {req.client_name}, Тема: {req.topic}\n"
     await update.message.reply_text(text)

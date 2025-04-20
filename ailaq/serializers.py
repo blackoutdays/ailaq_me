@@ -790,6 +790,15 @@ class EducationDocumentInputSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=True)
     file_signature = serializers.CharField(required=False, allow_blank=True)
 
+class OfficeInfoItemSerializer(serializers.Serializer):
+    country = serializers.CharField(required=False, allow_blank=True)
+    city = serializers.CharField(required=False, allow_blank=True)
+    district = serializers.CharField(required=False, allow_blank=True)
+    street_name = serializers.CharField(required=False, allow_blank=True)
+    building_number = serializers.CharField(required=False, allow_blank=True)
+    office_phone = serializers.CharField(required=False, allow_blank=True)
+    photo = serializers.URLField(required=False, allow_blank=True)
+
 class QualificationSerializer(serializers.ModelSerializer):
     qualification = serializers.CharField()
     works_with = serializers.ListField(child=serializers.CharField(), required=False)
@@ -804,9 +813,8 @@ class QualificationSerializer(serializers.ModelSerializer):
     office_photo = Base64ImageField(write_only=True, required=False)
     office_photo_url = serializers.SerializerMethodField()
 
-
     office_info = serializers.ListField(
-        child=serializers.DictField(child=serializers.CharField(allow_blank=True)),
+        child=OfficeInfoItemSerializer(),
         required=False
     )
 
