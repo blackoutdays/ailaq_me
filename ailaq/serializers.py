@@ -10,7 +10,6 @@ from hashlib import sha256
 from django.core.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 import hmac
-
 from .enums import CommunicationLanguageEnum, PreferredPsychologistGenderEnum
 from .tasks import send_email_async
 import time
@@ -138,7 +137,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         if wants_to_be_psychologist:
             PsychologistApplication.objects.get_or_create(user=user)
             # Профиль создастся автоматически в процессе создания заявки
-
         return user
 
 class LoginSerializer(serializers.Serializer):
@@ -458,7 +456,6 @@ class EducationDocumentSerializer(serializers.ModelSerializer):
         model = EducationDocument
         fields = ['document', 'year', 'title', 'file_signature']
 
-
 class PsychologistProfileSerializer(serializers.ModelSerializer):
     profile_id = serializers.IntegerField(source="id", read_only=True)
     full_name = serializers.SerializerMethodField()
@@ -490,7 +487,7 @@ class PsychologistProfileSerializer(serializers.ModelSerializer):
         return ""
 
     def get_age(self, obj):
-        """Вычисляет возраст психолога по дате рождения (если есть)"""
+        """Вычисляет возраст психолога по дате рождения"""
         if obj.application and obj.application.birth_date:
             today = date.today()
             bd = obj.application.birth_date
@@ -745,7 +742,7 @@ class CatalogSerializer(serializers.ModelSerializer):
     def get_reviews_count(self, obj) -> Optional[int]:
         return obj.get_reviews_count()
 
-#для вьющек сериализаторы по форме/профилю психолога
+#по форме/профилю психолога
 class PersonalInfoSerializer(serializers.ModelSerializer):
     profile_picture_url = serializers.SerializerMethodField()
     telegram_id = serializers.SerializerMethodField()

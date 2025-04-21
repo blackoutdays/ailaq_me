@@ -1,4 +1,4 @@
-from .models import PsychologistApplication, PsychologistProfile, CustomUser
+from .models import PsychologistApplication, PsychologistProfile
 from .emails import send_approval_email, send_rejection_email, send_documents_request_email
 import logging
 

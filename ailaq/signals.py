@@ -25,7 +25,7 @@ def handle_custom_user_post_save(sender, instance, created, **kwargs):
     if created and instance.wants_to_be_psychologist:
         PsychologistApplication.objects.get_or_create(user=instance)
         PsychologistProfile.objects.get_or_create(user=instance)
-        logger.info(f"🧠 Созданы заявка и профиль для психолога {instance.id}")
+        logger.info(f"Созданы заявка и профиль для психолога {instance.id}")
 
 @receiver(post_save, sender=PsychologistApplication)
 def handle_application_status_change(sender, instance, **kwargs):
