@@ -442,7 +442,6 @@ class PsychologistChangePasswordSerializer(serializers.Serializer):
         user.save()
         return user
 
-
 class EducationBlockSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=True)
     year = serializers.IntegerField(required=False, allow_null=True)
