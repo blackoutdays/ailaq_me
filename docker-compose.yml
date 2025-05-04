@@ -1,0 +1,119 @@
+
+services:
+  web:
+    build: ./ailaq_me
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=4 --timeout=600
+    volumes:
+      - ./ailaq_me:/app
+      - ./ailaq_me/staticfiles:/app/staticfiles
+      - ./ailaq_me/media:/app/media
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=rpc://
+      - DJANGO_SETTINGS_MODULE=config.settings
+    depends_on:
+      - db
+      - rabbitmq
+    restart: always
+
+  db:
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=ailaq
+      - POSTGRES_USER=aruka
+      - POSTGRES_PASSWORD=aruka
+    ports:
+      - "5432:5432"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  worker:
+    build: ./ailaq_me
+    command: celery -A config worker --loglevel=info
+    volumes:
+      - ./ailaq_me:/app
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=rpc://
+      - DJANGO_SETTINGS_MODULE=config.settings
+    depends_on:
+      - web
+      - rabbitmq
+      - db
+    restart: always
+
+  beat:
+    build: ./ailaq_me
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ./ailaq_me:/app
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=rpc://
+      - DJANGO_SETTINGS_MODULE=config.settings
+    depends_on:
+      - web
+      - worker
+      - rabbitmq
+      - db
+    restart: always
+
+  telegram_bot:
+    build: ./ailaq_me
+    command: python ailaq/telegram_bot.py
+    working_dir: /app
+    volumes:
+      - ./ailaq_me:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - PYTHONPATH=/app
+    depends_on:
+      - web
+    restart: always
+
+  ailaq_frontend:
+    build:
+      context: ./ailaq_frontend
+    working_dir: /app
+    command: npm run dev -- --host
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./ailaq_frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    restart: always
+
+  ailaq_admin:
+    build:
+      context: ./ailaq_admin
+    working_dir: /app
+    command: npm run dev -- --host --port 5175
+    ports:
+      - "5175:5175"
+    volumes:
+      - ./ailaq_admin:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    restart: always
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
