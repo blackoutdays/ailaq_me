@@ -1,7 +1,7 @@
 
 services:
   web:
-    build: ./ailaq_me
+    build: .
     command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers=4 --timeout=600
     volumes:
       - ./ailaq_me:/app
@@ -43,7 +43,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
   worker:
-    build: ./ailaq_me
+    build: .
     command: celery -A config worker --loglevel=info
     volumes:
       - ./ailaq_me:/app
@@ -58,7 +58,7 @@ services:
     restart: always
 
   beat:
-    build: ./ailaq_me
+    build: .
     command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - ./ailaq_me:/app
@@ -74,7 +74,7 @@ services:
     restart: always
 
   telegram_bot:
-    build: ./ailaq_me
+    build: .
     command: python ailaq/telegram_bot.py
     working_dir: /app
     volumes:
